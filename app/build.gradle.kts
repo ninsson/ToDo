@@ -79,5 +79,7 @@ dependencies {
     implementation("androidx.compose.material:material")
     // Material3 already present (compose BOM manages versions)
     // Icons (material icons extended) — wersja z BOM
-    implementation("androidx.compose.material:material-icons-extended")
+
+    implementation("androidx.compose.material:material-icons-extended:1.6.0") // Sprawdź najnowszą wersję
+
 }

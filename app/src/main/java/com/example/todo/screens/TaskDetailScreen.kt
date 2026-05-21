@@ -1,9 +1,11 @@
 package com.example.todo.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -25,34 +27,61 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
 
     val task = taskState ?: return
 
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Details") }, actions = {
-            IconButton(onClick = { navController.navigate("edit/${task.id}") }) {
-                Icon(imageVector = Icons.Filled.Edit, contentDescription = "Edit")
-            }
-        })
-    }) { padding ->
-        Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-            Text(task.title, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(task.description ?: "-", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(8.dp))
-            Text("Priority: ${task.priority}", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(4.dp))
-            Text("Status: ${task.status}", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(4.dp))
-            Text("Created: ${DateFormat.getDateTimeInstance().format(Date(task.createdAt))}", style = MaterialTheme.typography.bodySmall)
-            task.dueAt?.let { Text("Due: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall) }
-            Spacer(Modifier.height(8.dp))
-            if (task.attachments.isNotEmpty()) {
-                Text("Attachments:", style = MaterialTheme.typography.bodySmall)
-                task.attachments.forEach { att ->
-                    Text(att.name ?: att.uri, style = MaterialTheme.typography.bodySmall)
+    Scaffold(
+        topBar = {
+            MediumTopAppBar(
+                title = { Text("Szczegóły") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wstecz")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { navController.navigate("edit/${task.id}") }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edytuj")
+                    }
+                    IconButton(onClick = {
+                        scope.launch {
+                            viewModel.delete(task)
+                            navController.navigateUp()
+                        }
+                    }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column {
+                Text(task.title, style = MaterialTheme.typography.headlineMedium)
+                Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AssistChip(onClick = {}, label = { Text("Status: ${task.status}") })
+                    AssistChip(onClick = {}, label = { Text("Prio: ${task.priority}") })
                 }
             }
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = { scope.launch { viewModel.delete(task); navController.navigateUp() }}) {
-                Text("Delete")
+
+            HorizontalDivider()
+
+            Text(
+                text = task.description ?: "Brak opisu",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.weight(1f))
+
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Informacje o zadaniu", style = MaterialTheme.typography.labelLarge)
+                    Text("Utworzono: ${DateFormat.getDateTimeInstance().format(Date(task.createdAt))}", style = MaterialTheme.typography.bodySmall)
+                    task.dueAt?.let {
+                        Text("Termin: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
     }

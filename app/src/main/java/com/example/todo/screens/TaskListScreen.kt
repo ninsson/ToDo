@@ -1,22 +1,20 @@
 package com.example.todo.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.todo.data.Task
+import com.example.todo.data.TaskStatus
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 
@@ -25,69 +23,73 @@ import kotlinx.coroutines.launch
 fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
     val tasks by viewModel.tasks.collectAsState()
     val scope = rememberCoroutineScope()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text("ToDo") },
+            LargeTopAppBar(
+                title = { Text("Moje Zadania") },
                 actions = {
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(imageVector = Icons.Filled.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = "Ustawienia")
                     }
-                }
+                },
+                scrollBehavior = scrollBehavior
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { navController.navigate("create") }) {
-                Icon(imageVector = Icons.Filled.Add, contentDescription = "Add")
-            }
+            ExtendedFloatingActionButton(
+                onClick = { navController.navigate("create") },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("Dodaj zadanie") }
+            )
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
-            items(tasks) { task ->
-                TaskRow(
-                    task = task,
-                    onClick = { navController.navigate("details/${task.id}") },
-                    onToggleDone = {
-                        val t = task.copy(
-                            status = if (task.status == com.example.todo.data.TaskStatus.DONE)
-                                com.example.todo.data.TaskStatus.PENDING
-                            else com.example.todo.data.TaskStatus.DONE
-                        )
-                        scope.launch { viewModel.update(t) }
-                    },
-                    onSwipeDelete = { scope.launch { viewModel.delete(task) } }
-                )
+        if (tasks.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Text("Brak zadań. Dodaj coś!", style = MaterialTheme.typography.bodyLarge)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(tasks) { task ->
+                    TaskRow(
+                        task = task,
+                        onClick = { navController.navigate("details/${task.id}") },
+                        onToggleDone = {
+                            val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
+                            scope.launch { viewModel.update(task.copy(status = newStatus)) }
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun TaskRow(task: Task, onClick: () -> Unit, onToggleDone: () -> Unit, onSwipeDelete: () -> Unit) {
-    Card(modifier = Modifier
-        .padding(8.dp)
-        .fillMaxWidth()
-        .clickable(onClick = onClick)
+fun TaskRow(task: Task, onClick: () -> Unit, onToggleDone: () -> Unit) {
+    ElevatedCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .padding(12.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = task.title, style = MaterialTheme.typography.titleMedium)
-                task.description?.let { Text(text = it, style = MaterialTheme.typography.bodySmall) }
-            }
-            IconButton(onClick = onToggleDone) {
-                Icon(
-                    imageVector = if (task.status == com.example.todo.data.TaskStatus.DONE)
-                        Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
-                    contentDescription = null
+        ListItem(
+            headlineContent = { Text(task.title, style = MaterialTheme.typography.titleMedium) },
+            supportingContent = {
+                task.description?.let {
+                    Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            },
+            trailingContent = {
+                Checkbox(
+                    checked = task.status == TaskStatus.DONE,
+                    onCheckedChange = { onToggleDone() }
                 )
             }
-        }
+        )
     }
 }

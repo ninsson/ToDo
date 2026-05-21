@@ -1,9 +1,10 @@
 package com.example.todo.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -26,37 +27,68 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         }
     }
 
-    var title by remember { mutableStateOf(task?.title ?: "") }
-    var desc by remember { mutableStateOf(task?.description ?: "") }
+    var title by remember { mutableStateOf("") }
+    var desc by remember { mutableStateOf("") }
 
     LaunchedEffect(task) {
-        title = task?.title ?: ""
-        desc = task?.description ?: ""
+        task?.let {
+            title = it.title
+            desc = it.description ?: ""
+        }
     }
 
-    Scaffold(topBar = {
-        TopAppBar(title = { Text(if (taskId == null) "Create Task" else "Edit Task") })
-    }, floatingActionButton = {
-        FloatingActionButton(onClick = {
-            val t = task?.copy(title = title, description = desc) ?: Task(title = title, description = desc)
-            scope.launch {
-                if (t.id == 0L) {
-                    viewModel.create(t) { id -> navController.navigate("details/$id") }
-                } else {
-                    viewModel.update(t)
-                    navController.navigateUp()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(if (taskId == null) "Nowe zadanie" else "Edycja zadania") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wstecz")
+                    }
                 }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                val updatedTask = task?.copy(title = title, description = desc) ?: Task(title = title, description = desc)
+                scope.launch {
+                    if (updatedTask.id == 0L) {
+                        viewModel.create(updatedTask) { id ->
+                            navController.navigate("details/$id") {
+                                popUpTo("create") { inclusive = true }
+                            }
+                        }
+                    } else {
+                        viewModel.update(updatedTask)
+                        navController.navigateUp()
+                    }
+                }
+            }) {
+                Icon(Icons.Default.Done, contentDescription = "Zapisz")
             }
-        }) {
-            Icon(imageVector = Icons.Filled.Done, contentDescription = "Save")
         }
-    }) { padding ->
-        Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), maxLines = 6)
-            Spacer(Modifier.height(8.dp))
-            Text("TODO: add date/time, location, attachments, recurring options", style = MaterialTheme.typography.bodySmall)
+    ) { padding ->
+        Column(
+            modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Tytuł") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            OutlinedTextField(
+                value = desc,
+                onValueChange = { desc = it },
+                label = { Text("Opis (opcjonalnie)") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
+            )
+
+            Text("Wskazówka: Material 3 preferuje OutlinedTextField dla formularzy.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         }
     }
 }
