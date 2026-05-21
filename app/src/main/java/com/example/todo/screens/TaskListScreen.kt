@@ -45,15 +45,26 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                 text = { Text("Dodaj zadanie") }
             )
         }
-    ) { padding ->
+    ) { padding -> // Ten padding zawiera w sobie wysokość paska stanu i top bara!
         if (tasks.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
                 Text("Brak zadań. Dodaj coś!", style = MaterialTheme.typography.bodyLarge)
             }
         } else {
             LazyColumn(
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
+                modifier = Modifier.fillMaxSize(),
+                // Łączymy padding systemowy z naszym domyślnym 16.dp po bokach i na dole
+                contentPadding = PaddingValues(
+                    top = padding.calculateTopPadding() + 8.dp,
+                    bottom = padding.calculateBottomPadding() + 16.dp,
+                    start = 16.dp,
+                    end = 16.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(tasks) { task ->
