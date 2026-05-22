@@ -1,39 +1,44 @@
 package com.example.todo.screens
 
+import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
 import com.example.todo.data.Task
 import com.example.todo.viewmodel.TaskViewModel
-import kotlinx.coroutines.launch
-import java.util.*
 import com.google.android.gms.location.LocationServices
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,33 +48,29 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     var task by remember { mutableStateOf<Task?>(null) }
 
+    var title by remember { mutableStateOf("") }
+    var desc by remember { mutableStateOf("") }
+    var recurrence by remember { mutableStateOf("brak") }
+    var reminderMillis by remember { mutableStateOf<Long?>(null) }
+    var dueMillis by remember { mutableStateOf<Long?>(null) }
+    var priority by remember { mutableStateOf(Priority.MEDIUM) }
+
     LaunchedEffect(taskId) {
         if (taskId != null) {
-            viewModel.getById(taskId) { t -> task = t }
+            viewModel.getById(taskId) { t ->
+                task = t
+                title = t?.title ?: ""
+                desc = t?.description ?: ""
+                recurrence = t?.recurringRule ?: "brak"
+                reminderMillis = t?.reminderTimeMillis
+                dueMillis = t?.dueAt
+                priority = t?.priority ?: Priority.MEDIUM
+            }
         } else {
             task = Task(title = "", description = "")
         }
     }
 
-    var title by remember { mutableStateOf("") }
-    var desc by remember { mutableStateOf("") }
-    var recurrence by remember { mutableStateOf(task?.recurringRule ?: "NONE") }
-    var reminderMillis by remember { mutableStateOf<Long?>(null) }
-    var dueMillis by remember { mutableStateOf<Long?>(null) }
-    var priority by remember { mutableStateOf(Priority.MEDIUM) }
-
-    LaunchedEffect(task) {
-        task?.let {
-            title = it.title
-            desc = it.description ?: ""
-            recurrence = it.recurringRule ?: "brak"
-            reminderMillis = it.reminderTimeMillis
-            dueMillis = it.dueAt
-            priority = it.priority
-        }
-    }
-
-    // Attachments launcher
     val pickDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
             try {
@@ -82,12 +83,17 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         }
     }
 
-    // Permission launcher for location
     val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        // result handled inline when fetching location
+        if (granted) {
+            val fused = LocationServices.getFusedLocationProviderClient(context)
+            try {
+                fused.lastLocation.addOnSuccessListener { loc ->
+                    loc?.let { task = task?.copy(locationLat = it.latitude, locationLng = it.longitude) }
+                }
+            } catch (e: SecurityException) { /* Ignoruj, jeśli brak uprawnień mimo przyznania */ }
+        }
     }
 
-    // Date + time pickers helper
     fun pickDateTime(existingMillis: Long?, onPicked: (Long) -> Unit) {
         val cal = Calendar.getInstance()
         if (existingMillis != null) cal.timeInMillis = existingMillis
@@ -106,6 +112,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
 
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,52 +126,53 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                val updatedTask = task?.copy(
-                    title = title,
-                    description = desc,
-                    recurringRule = if (recurrence == "brak") null else recurrence,
-                    reminderTimeMillis = reminderMillis,
-                    dueAt = dueMillis,
-                    priority = priority
-                ) ?: Task(
-                    title = title,
-                    description = desc,
-                    recurringRule = if (recurrence == "brak") null else recurrence,
-                    reminderTimeMillis = reminderMillis,
-                    dueAt = dueMillis,
-                    priority = priority
-                )
+            FloatingActionButton(
+                onClick = {
+                    val updatedTask = task?.copy(
+                        title = title,
+                        description = desc.takeIf { it.isNotBlank() },
+                        recurringRule = if (recurrence == "brak") null else recurrence,
+                        reminderTimeMillis = reminderMillis,
+                        dueAt = dueMillis,
+                        priority = priority
+                    ) ?: return@FloatingActionButton
 
-                scope.launch {
-                    if (updatedTask.id == 0L) {
-                        viewModel.create(updatedTask) { id ->
-                            navController.navigate("details/$id") {
-                                popUpTo("create") { inclusive = true }
+                    scope.launch {
+                        if (updatedTask.id == 0L) {
+                            viewModel.create(updatedTask) { id ->
+                                navController.navigate("details/$id") {
+                                    popUpTo("create") { inclusive = true }
+                                }
                             }
+                        } else {
+                            viewModel.update(updatedTask)
+                            navController.navigateUp()
                         }
-                    } else {
-                        viewModel.update(updatedTask)
-                        navController.navigateUp()
                     }
-                }
-            }) {
-                Icon(Icons.Default.Done, contentDescription = "Zapisz")
+                },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(Icons.Default.Done, contentDescription = "Zapisz", tint = MaterialTheme.colorScheme.onPrimary)
             }
         }
     ) { padding ->
-        Column(modifier = Modifier
-            .padding(padding)
-            .padding(16.dp)
-            .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
+            // Sekcja: Podstawowe informacje
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
                 label = { Text("Tytuł") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
             )
 
             OutlinedTextField(
@@ -171,140 +180,195 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 onValueChange = { desc = it },
                 label = { Text("Opis (opcjonalnie)") },
                 modifier = Modifier.fillMaxWidth(),
-                minLines = 3
+                minLines = 3,
+                shape = RoundedCornerShape(12.dp)
             )
 
-            // Priority selection (colored chips)
-            Text("Priorytet:", style = MaterialTheme.typography.labelLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PriorityChip(Priority.LOW, priority == Priority.LOW) { priority = it }
-                PriorityChip(Priority.MEDIUM, priority == Priority.MEDIUM) { priority = it }
-                PriorityChip(Priority.HIGH, priority == Priority.HIGH) { priority = it }
-            }
-
-            // Due date picker
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Termin:", modifier = Modifier.alignByBaseline())
-                if (dueMillis != null) {
-                    Text(java.text.DateFormat.getDateTimeInstance().format(Date(dueMillis!!)))
-                    TextButton(onClick = { dueMillis = null }) { Text("Usuń") }
-                } else {
-                    Text("brak")
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = { pickDateTime(dueMillis) { picked -> dueMillis = picked } }) {
-                    Text("Ustaw termin")
+            // Sekcja: Priorytet
+            Column {
+                Text("Priorytet", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    PriorityChip(Priority.LOW, priority == Priority.LOW) { priority = it }
+                    PriorityChip(Priority.MEDIUM, priority == Priority.MEDIUM) { priority = it }
+                    PriorityChip(Priority.HIGH, priority == Priority.HIGH) { priority = it }
                 }
             }
 
-            // Reminder picker (kept)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Przypomnienie:", modifier = Modifier.alignByBaseline())
-                if (reminderMillis != null) {
-                    Text(java.text.DateFormat.getDateTimeInstance().format(Date(reminderMillis!!)))
-                    TextButton(onClick = { reminderMillis = null }) { Text("Usuń") }
-                } else {
-                    Text("brak")
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = { pickDateTime(reminderMillis) { picked -> reminderMillis = picked } }) {
-                    Text("Ustaw datę/godzinę")
-                }
-            }
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Attachments block
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { pickDocumentLauncher.launch(arrayOf("*/*")) }) {
-                    Icon(Icons.Default.AttachFile, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Dodaj załącznik")
-                }
-                Text("${task?.attachments?.size ?: 0} załączników")
-            }
+            // Sekcja: Daty i czas (Wizualnie ulepszona używając elementu Card)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-            task?.attachments?.let { list ->
-                if (list.isNotEmpty()) {
-                    LazyColumn {
-                        items(list) { att ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(att.name ?: att.uri, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(att.mimeType ?: "unknown", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                }
-                                TextButton(onClick = {
-                                    task = task?.copy(attachments = task!!.attachments.filter { it.uri != att.uri })
-                                }) {
-                                    Text("Usuń")
-                                }
+                    // Termin
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Termin wykonania", fontWeight = FontWeight.Bold)
+                                Text(dueMillis?.let { dateFormatter.format(Date(it)) } ?: "Brak terminu", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (dueMillis != null) {
+                            IconButton(onClick = { dueMillis = null }) { Icon(Icons.Default.Clear, contentDescription = "Usuń") }
+                        } else {
+                            TextButton(onClick = { pickDateTime(dueMillis) { dueMillis = it } }) { Text("Ustaw") }
+                        }
+                    }
+
+                    // Przypomnienie
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Przypomnienie", fontWeight = FontWeight.Bold)
+                                Text(reminderMillis?.let { dateFormatter.format(Date(it)) } ?: "Brak przypomnienia", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (reminderMillis != null) {
+                            IconButton(onClick = { reminderMillis = null }) { Icon(Icons.Default.Clear, contentDescription = "Usuń") }
+                        } else {
+                            TextButton(onClick = { pickDateTime(reminderMillis) { reminderMillis = it } }) { Text("Ustaw") }
+                        }
+                    }
+
+                    // Cykliczność
+                    var recurrenceMenuExpanded by remember { mutableStateOf(false) }
+                    val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc")
+
+                    ExposedDropdownMenuBox(
+                        expanded = recurrenceMenuExpanded,
+                        onExpandedChange = { recurrenceMenuExpanded = !recurrenceMenuExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = recurrence,
+                            onValueChange = { },
+                            readOnly = true,
+                            label = { Text("Powtarzalność") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = recurrenceMenuExpanded) },
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        ExposedDropdownMenu(
+                            expanded = recurrenceMenuExpanded,
+                            onDismissRequest = { recurrenceMenuExpanded = false }
+                        ) {
+                            recurrenceOptions.forEach { opt ->
+                                DropdownMenuItem(
+                                    text = { Text(opt) },
+                                    onClick = {
+                                        recurrence = opt
+                                        // Zmiana taska tutaj nie zresetuje już tytułu!
+                                        task = task?.copy(recurringRule = if (opt == "brak") null else opt)
+                                        recurrenceMenuExpanded = false
+                                    }
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Location block
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.LocationOn, contentDescription = null)
-                Column {
+            // Sekcja: Załączniki (Zastąpiono LazyColumn pętlą dla uniknięcia błędów scrollowania)
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Załączniki (${task?.attachments?.size ?: 0})", fontWeight = FontWeight.Bold)
+                        TextButton(onClick = { pickDocumentLauncher.launch(arrayOf("*/*")) }) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Dodaj")
+                        }
+                    }
+
+                    task?.attachments?.forEach { att ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AttachFile, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(att.name ?: "Nieznany plik", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                                    Text(att.mimeType ?: "unknown", style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            IconButton(onClick = {
+                                task = task?.copy(attachments = task!!.attachments.filter { it.uri != att.uri })
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Sekcja: Lokalizacja
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     val lat = task?.locationLat
                     val lng = task?.locationLng
-                    Text(if (lat != null && lng != null) "Lokalizacja: %.5f, %.5f".format(lat, lng) else "Brak lokalizacji")
-                    Row {
-                        Button(onClick = {
-                            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
-                            val pm = context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
-                            if (pm == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Lokalizacja", fontWeight = FontWeight.Bold)
+                            if (lat != null && lng != null) {
+                                Text("%.5f, %.5f".format(lat, lng), style = MaterialTheme.typography.bodyMedium)
+                            } else {
+                                Text("Brak przypisanej lokalizacji", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        if (lat != null) {
+                            TextButton(onClick = { task = task?.copy(locationLat = null, locationLng = null) }) {
+                                Text("Usuń", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                        TextButton(onClick = {
+                            val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
                                 val fused = LocationServices.getFusedLocationProviderClient(context)
                                 fused.lastLocation.addOnSuccessListener { loc ->
-                                    loc?.let {
-                                        task = task?.copy(locationLat = it.latitude, locationLng = it.longitude)
-                                    }
+                                    loc?.let { task = task?.copy(locationLat = it.latitude, locationLng = it.longitude) }
                                 }
+                            } else {
+                                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                             }
                         }) {
-                            Text("Ustaw na aktualną")
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        if (task?.locationLat != null) {
-                            TextButton(onClick = { task = task?.copy(locationLat = null, locationLng = null) }) {
-                                Text("Usuń lokalizację")
-                            }
+                            Text("Ustaw aktualną")
                         }
                     }
                 }
             }
 
-            // Recurrence selection
-            val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc")
-            var recurrenceMenuExpanded by remember { mutableStateOf(false) }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Powtarzalność:", modifier = Modifier.alignByBaseline())
-                ExposedDropdownMenuBox(expanded = recurrenceMenuExpanded, onExpandedChange = { recurrenceMenuExpanded = !recurrenceMenuExpanded }) {
-                    OutlinedTextField(
-                        value = recurrence,
-                        onValueChange = { },
-                        readOnly = true,
-                        label = { Text("Cykliczność") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = recurrenceMenuExpanded) },
-                        modifier = Modifier.menuAnchor()
-                    )
-                    ExposedDropdownMenu(expanded = recurrenceMenuExpanded, onDismissRequest = { recurrenceMenuExpanded = false }) {
-                        recurrenceOptions.forEach { opt ->
-                            DropdownMenuItem(text = { Text(opt) }, onClick = {
-                                recurrence = opt
-                                task = task?.copy(recurringRule = if (opt == "brak") null else opt)
-                                recurrenceMenuExpanded = false
-                            })
-                        }
-                    }
-                }
-            }
+            // Margines pod przyciskiem FAB
+            Spacer(modifier = Modifier.height(72.dp))
         }
     }
 }
@@ -333,8 +397,6 @@ private fun PriorityChip(p: Priority, selected: Boolean, onSelect: (Priority) ->
         modifier = Modifier.defaultMinSize(minHeight = 36.dp)
     )
 }
-
-private val IntentFlagsForUri = (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
 
 private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
     var name: String? = null
