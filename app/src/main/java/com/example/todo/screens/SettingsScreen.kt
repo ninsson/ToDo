@@ -67,9 +67,6 @@ fun SettingsScreen(navController: NavController) {
                 title = "Kopia zapasowa",
                 subtitle = "Synchronizacja z kontem Google"
             )
-
-//            Spacer(Modifier.height(24.dp))
-//            HorizontalDivider()
         }
     }
 }
