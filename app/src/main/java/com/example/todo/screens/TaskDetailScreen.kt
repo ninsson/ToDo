@@ -69,13 +69,32 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            HorizontalDivider()
+            Divider()
 
             Text(
                 text = task.description ?: "Brak opisu",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // Location
+            task.locationLat?.let { lat ->
+                task.locationLng?.let { lng ->
+                    Text("Lokalizacja: %.5f, %.5f".format(lat, lng), style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = {
+                        // otwórz mapę z trasą -> użyj geo: lub google maps url
+                        val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(task.title)})")
+                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                        context.startActivity(mapIntent)
+                    }) {
+                        Text("Pokaż w mapach / trasa")
+                    }
+                }
+            }
+
+            // Recurrence
+            Text("Cykliczność: ${task.recurringRule ?: "Brak"}", style = MaterialTheme.typography.bodyMedium)
 
             // Attachments list
             if (task.attachments.isNotEmpty()) {
@@ -100,7 +119,7 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     }
                 }
 
-                HorizontalDivider()
+                Divider()
             }
 
             Spacer(Modifier.weight(1f))
@@ -111,6 +130,9 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     Text("Utworzono: ${DateFormat.getDateTimeInstance().format(Date(task.createdAt))}", style = MaterialTheme.typography.bodySmall)
                     task.dueAt?.let {
                         Text("Termin: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    task.reminderTimeMillis?.let {
+                        Text("Przypomnienie: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
