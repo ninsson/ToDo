@@ -18,12 +18,25 @@ import com.example.todo.data.TaskStatus
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Material (stable) imports for SwipeToDismiss are in material package and require opt-in
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.rememberDismissState
+import androidx.compose.material.ExperimentalMaterialApi
+
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
-    val tasks by viewModel.tasks.collectAsState()
+    val tasks by viewModel.visibleTasks.collectAsState()
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    // local search state bound to viewModel
+    var query by remember { mutableStateOf("") }
+    LaunchedEffect(query) {
+        viewModel.setSearchQuery(query)
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -46,36 +59,76 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
             )
         }
     ) { padding -> // Ten padding zawiera w sobie wysokość paska stanu i top bara!
-        if (tasks.isEmpty()) {
-            Box(
+        Column(modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)) {
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Szukaj...") },
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = androidx.compose.ui.Alignment.Center
-            ) {
-                Text("Brak zadań. Dodaj coś!", style = MaterialTheme.typography.bodyLarge)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                // Łączymy padding systemowy z naszym domyślnym 16.dp po bokach i na dole
-                contentPadding = PaddingValues(
-                    top = padding.calculateTopPadding() + 8.dp,
-                    bottom = padding.calculateBottomPadding() + 16.dp,
-                    start = 16.dp,
-                    end = 16.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(tasks) { task ->
-                    TaskRow(
-                        task = task,
-                        onClick = { navController.navigate("details/${task.id}") },
-                        onToggleDone = {
-                            val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
-                            scope.launch { viewModel.update(task.copy(status = newStatus)) }
-                        }
-                    )
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true
+            )
+
+            if (tasks.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    Text("Brak zadań. Dodaj coś!", style = MaterialTheme.typography.bodyLarge)
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    // Padding: top already taken from topBar; dolne i boczne
+                    contentPadding = PaddingValues(
+                        top = 8.dp,
+                        bottom = padding.calculateBottomPadding() + 16.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(tasks, key = { it.id }) { task ->
+                        // dismiss state
+                        val dismissState = rememberDismissState(confirmStateChange = { state ->
+                            when (state) {
+                                DismissValue.DismissedToEnd -> {
+                                    // Right swipe -> toggle done
+                                    val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
+                                    scope.launch { viewModel.update(task.copy(status = newStatus)) }
+                                    true
+                                }
+                                DismissValue.DismissedToStart -> {
+                                    // Left swipe -> delete
+                                    scope.launch { viewModel.delete(task) }
+                                    true
+                                }
+                                else -> false
+                            }
+                        })
+
+                        SwipeToDismiss(
+                            state = dismissState,
+                            directions = setOf(DismissDirection.StartToEnd, DismissDirection.EndToStart),
+                            background = {},
+                            dismissContent = {
+                                TaskRow(
+                                    task = task,
+                                    onClick = { navController.navigate("details/${task.id}") },
+                                    onToggleDone = {
+                                        val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
+                                        scope.launch { viewModel.update(task.copy(status = newStatus)) }
+                                    }
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }

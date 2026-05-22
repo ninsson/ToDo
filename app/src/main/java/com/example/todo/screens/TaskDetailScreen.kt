@@ -1,5 +1,8 @@
 package com.example.todo.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -8,6 +11,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.todo.viewmodel.TaskViewModel
@@ -20,6 +24,7 @@ import java.util.*
 fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, taskId: Long) {
     var taskState by remember { mutableStateOf<com.example.todo.data.Task?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(taskId) {
         viewModel.getById(taskId) { t -> taskState = t }
@@ -71,6 +76,32 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // Attachments list
+            if (task.attachments.isNotEmpty()) {
+                Text("Załączniki", style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    task.attachments.forEach { att ->
+                        Text(
+                            text = att.name ?: att.uri,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    // open attachment
+                                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                                        data = Uri.parse(att.uri)
+                                        flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    }
+                                    context.startActivity(intent)
+                                },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                HorizontalDivider()
+            }
 
             Spacer(Modifier.weight(1f))
 

@@ -15,7 +15,7 @@ import androidx.room.Room
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         enableEdgeToEdge()
 
         val db = Room.databaseBuilder(
@@ -28,7 +28,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ToDoTheme {
-                val vm: TaskViewModel = viewModel(factory = TaskViewModel.Factory(repo))
+                // Przekazujemy applicationContext do factory, aby ViewModel mógł planować przypomnienia
+                val vm: TaskViewModel = viewModel(factory = TaskViewModel.Factory(repo, applicationContext))
                 MainNavHost(viewModel = vm)
             }
         }
