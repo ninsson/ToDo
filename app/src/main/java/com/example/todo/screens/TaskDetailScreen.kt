@@ -5,24 +5,29 @@ import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.todo.data.Priority
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
-import java.text.DateFormat
+import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,11 +42,12 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
     }
 
     val task = taskState ?: return
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
 
     Scaffold(
         topBar = {
             MediumTopAppBar(
-                title = { Text("Szczegóły") },
+                title = { Text("Szczegóły zadania") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wstecz")
@@ -66,89 +72,200 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
+            // Sekcja: Nagłówek i status
             Column {
-                Text(task.title, style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
                 Row(
                     modifier = Modifier.padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    AssistChip(onClick = {}, label = { Text("Status: ${task.status}") })
-
-                    // Pojedynczy neutralny element z kolorową kropką wskazującą priorytet
+                    AssistChip(
+                        onClick = {},
+                        label = { Text("Status: ${task.status}") },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    )
                     PriorityIndicatorSimple(priority = task.priority)
                 }
             }
 
-            Divider()
+            // Sekcja: Opis
+            if (!task.description.isNullOrBlank()) {
+                Text(
+                    text = task.description!!,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            } else {
+                Text(
+                    text = "Brak opisu",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = FontStyle.Italic
+                )
+            }
 
-            Text(
-                text = task.description ?: "Brak opisu",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Sekcja: Czas i przypomnienia (Główna karta)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
-            // Location
-            task.locationLat?.let { lat ->
-                task.locationLng?.let { lng ->
-                    Text("Lokalizacja: %.5f, %.5f".format(lat, lng), style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = {
-                        val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(task.title)})")
-                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                        context.startActivity(mapIntent)
-                    }) {
-                        Text("Pokaż w mapach / trasa")
+                    // Termin
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text("Termin wykonania", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = task.dueAt?.let { dateFormatter.format(Date(it)) } ?: "Brak terminu",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (task.dueAt != null) FontWeight.Medium else FontWeight.Normal
+                            )
+                        }
+                    }
+
+                    // Przypomnienie
+                    if (task.reminderTimeMillis != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Przypomnienie", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = dateFormatter.format(Date(task.reminderTimeMillis!!)),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    // Cykliczność
+                    if (task.recurringRule != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Powtarzalność", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = task.recurringRule!!,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // Recurrence
-            Text("Cykliczność: ${task.recurringRule ?: "Brak"}", style = MaterialTheme.typography.bodyMedium)
+            // Sekcja: Lokalizacja
+            if (task.locationLat != null && task.locationLng != null) {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Lokalizacja", fontWeight = FontWeight.Bold)
+                                Text("%.5f, %.5f".format(task.locationLat, task.locationLng), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val gmmIntentUri = Uri.parse("geo:${task.locationLat},${task.locationLng}?q=${task.locationLat},${task.locationLng}(${Uri.encode(task.title)})")
+                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                context.startActivity(mapIntent)
+                            },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Otwórz w Mapach")
+                        }
+                    }
+                }
+            }
 
-            // Attachments list
+            // Sekcja: Załączniki
             if (task.attachments.isNotEmpty()) {
-                Text("Załączniki", style = MaterialTheme.typography.labelLarge)
+                Text("Załączniki (${task.attachments.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     task.attachments.forEach { att ->
-                        Text(
-                            text = att.name ?: att.uri,
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable {
-                                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        data = Uri.parse(att.uri)
-                                        flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            data = Uri.parse(att.uri)
+                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        // Opcjonalnie obsłuż błąd braku aplikacji do otwarcia pliku
                                     }
-                                    context.startActivity(intent)
-                                },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
+                                }
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AttachFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = att.name ?: "Nieznany plik",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (att.mimeType != null) {
+                                    Text(att.mimeType, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Wypełniacz, żeby zepchnąć metadane na sam dół (opcjonalnie, scroll i tak to ogarnie)
+            Spacer(Modifier.height(16.dp))
+
+            // Sekcja: Informacje techniczne / Metadane
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.outlinedCardColors(containerColor = Color.Transparent)
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Szczegóły techniczne", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Utworzono: ${dateFormatter.format(Date(task.createdAt))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-
-                Divider()
             }
 
-            Spacer(Modifier.weight(1f))
-
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Informacje o zadaniu", style = MaterialTheme.typography.labelLarge)
-                    Text("Utworzono: ${DateFormat.getDateTimeInstance().format(Date(task.createdAt))}", style = MaterialTheme.typography.bodySmall)
-                    task.dueAt?.let {
-                        Text("Termin: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall)
-                    }
-                    task.reminderTimeMillis?.let {
-                        Text("Przypomnienie: ${DateFormat.getDateTimeInstance().format(Date(it))}", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
+            // Margines dolny
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -170,20 +287,18 @@ private fun PriorityIndicatorSimple(priority: Priority) {
         color = MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .height(IntrinsicSize.Min)
+        modifier = Modifier.height(IntrinsicSize.Min)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(12.dp)
+                    .size(10.dp)
                     .background(color = dotColor, shape = CircleShape)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
