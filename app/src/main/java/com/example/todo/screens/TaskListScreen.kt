@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -34,12 +33,14 @@ import androidx.compose.material.SwipeToDismiss
 import androidx.compose.material.rememberDismissState
 import androidx.compose.material.ExperimentalMaterialApi
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.statusBarsPadding
+
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
     val tasks by viewModel.visibleTasks.collectAsState()
     val scope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     // search/local UI state
     var query by remember { mutableStateOf("") }
@@ -57,7 +58,7 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            CenterAlignedTopAppBar(
                 title = { Text("Moje Zadania") },
                 actions = {
                     IconButton(onClick = { sortMenuExpanded = true }) {
@@ -68,12 +69,11 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                         DropdownMenuItem(text = { Text("Sortuj: Termin") }, onClick = { sort = SortOption.DUE_DATE; sortMenuExpanded = false })
                         DropdownMenuItem(text = { Text("Sortuj: Data utworzenia") }, onClick = { sort = SortOption.CREATED_AT; sortMenuExpanded = false })
                     }
-
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Default.Settings, contentDescription = "Ustawienia")
                     }
                 },
-                scrollBehavior = scrollBehavior
+                modifier = Modifier.statusBarsPadding()
             )
         },
         floatingActionButton = {
@@ -100,20 +100,18 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                 singleLine = true
             )
 
-            // Filter chips row
-            Row(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                FilterChipSelectable("Wszystko", FilterOption.ALL, filter) { filter = it }
-                FilterChipSelectable("Na dziś", FilterOption.TODAY, filter) { filter = it }
-                FilterChipSelectable("Zaległe", FilterOption.OVERDUE, filter) { filter = it }
-                FilterChipSelectable("Wysoki priorytet", FilterOption.HIGH_PRIORITY, filter) { filter = it }
-                FilterChipSelectable("Oczekujące", FilterOption.PENDING, filter) { filter = it }
-                FilterChipSelectable("Wykonane", FilterOption.DONE, filter) { filter = it }
+                val chipPadding = Modifier.padding(end = 8.dp, bottom = 8.dp)
+                Box(modifier = chipPadding) { FilterChipSelectable("Wszystko", FilterOption.ALL, filter) { filter = it } }
+                Box(modifier = chipPadding) { FilterChipSelectable("Na dziś", FilterOption.TODAY, filter) { filter = it } }
+                Box(modifier = chipPadding) { FilterChipSelectable("Zaległe", FilterOption.OVERDUE, filter) { filter = it } }
+                Box(modifier = chipPadding) { FilterChipSelectable("Wysoki priorytet", FilterOption.HIGH_PRIORITY, filter) { filter = it } }
+                Box(modifier = chipPadding) { FilterChipSelectable("Oczekujące", FilterOption.PENDING, filter) { filter = it } }
+                Box(modifier = chipPadding) { FilterChipSelectable("Wykonane", FilterOption.DONE, filter) { filter = it } }
             }
 
             if (tasks.isEmpty()) {
