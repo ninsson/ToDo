@@ -3,38 +3,37 @@ package com.example.todo.screens
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.ContentResolver
-import android.content.Context
-import android.location.Location
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.todo.data.Attachment
+import com.example.todo.data.Priority
 import com.example.todo.data.Task
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 import java.util.*
 import com.google.android.gms.location.LocationServices
-import androidx.activity.result.ActivityResultLauncher
-import android.Manifest
-import android.content.Intent
-import androidx.compose.material3.Icon
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.Color
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,8 +53,10 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
-    var recurrence by remember { mutableStateOf(task?.recurringRule ?: "brak") }
+    var recurrence by remember { mutableStateOf(task?.recurringRule ?: "NONE") }
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
+    var dueMillis by remember { mutableStateOf<Long?>(null) }
+    var priority by remember { mutableStateOf(Priority.MEDIUM) }
 
     LaunchedEffect(task) {
         task?.let {
@@ -63,13 +64,14 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             desc = it.description ?: ""
             recurrence = it.recurringRule ?: "brak"
             reminderMillis = it.reminderTimeMillis
+            dueMillis = it.dueAt
+            priority = it.priority
         }
     }
 
     // Attachments launcher
     val pickDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
-            // try to take persistable permission
             try {
                 context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: Exception) { }
@@ -82,7 +84,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     // Permission launcher for location
     val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        // handled below when requesting
+        // result handled inline when fetching location
     }
 
     // Date + time pickers helper
@@ -94,7 +96,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             cal.set(Calendar.YEAR, y)
             cal.set(Calendar.MONTH, m)
             cal.set(Calendar.DAY_OF_MONTH, d)
-            // then time
             TimePickerDialog(context, { _, hour, minute ->
                 cal.set(Calendar.HOUR_OF_DAY, hour)
                 cal.set(Calendar.MINUTE, minute)
@@ -122,8 +123,17 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     title = title,
                     description = desc,
                     recurringRule = if (recurrence == "brak") null else recurrence,
-                    reminderTimeMillis = reminderMillis
-                ) ?: Task(title = title, description = desc, recurringRule = if (recurrence == "brak") null else recurrence, reminderTimeMillis = reminderMillis)
+                    reminderTimeMillis = reminderMillis,
+                    dueAt = dueMillis,
+                    priority = priority
+                ) ?: Task(
+                    title = title,
+                    description = desc,
+                    recurringRule = if (recurrence == "brak") null else recurrence,
+                    reminderTimeMillis = reminderMillis,
+                    dueAt = dueMillis,
+                    priority = priority
+                )
 
                 scope.launch {
                     if (updatedTask.id == 0L) {
@@ -164,6 +174,44 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 minLines = 3
             )
 
+            // Priority selection (colored chips)
+            Text("Priorytet:", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PriorityChip(Priority.LOW, priority == Priority.LOW) { priority = it }
+                PriorityChip(Priority.MEDIUM, priority == Priority.MEDIUM) { priority = it }
+                PriorityChip(Priority.HIGH, priority == Priority.HIGH) { priority = it }
+            }
+
+            // Due date picker
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Termin:", modifier = Modifier.alignByBaseline())
+                if (dueMillis != null) {
+                    Text(java.text.DateFormat.getDateTimeInstance().format(Date(dueMillis!!)))
+                    TextButton(onClick = { dueMillis = null }) { Text("Usuń") }
+                } else {
+                    Text("brak")
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { pickDateTime(dueMillis) { picked -> dueMillis = picked } }) {
+                    Text("Ustaw termin")
+                }
+            }
+
+            // Reminder picker (kept)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Przypomnienie:", modifier = Modifier.alignByBaseline())
+                if (reminderMillis != null) {
+                    Text(java.text.DateFormat.getDateTimeInstance().format(Date(reminderMillis!!)))
+                    TextButton(onClick = { reminderMillis = null }) { Text("Usuń") }
+                } else {
+                    Text("brak")
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { pickDateTime(reminderMillis) { picked -> reminderMillis = picked } }) {
+                    Text("Ustaw datę/godzinę")
+                }
+            }
+
             // Attachments block
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { pickDocumentLauncher.launch(arrayOf("*/*")) }) {
@@ -174,13 +222,14 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 Text("${task?.attachments?.size ?: 0} załączników")
             }
 
-            // list attachments with delete
             task?.attachments?.let { list ->
                 if (list.isNotEmpty()) {
                     LazyColumn {
                         items(list) { att ->
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -189,7 +238,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     Text(att.mimeType ?: "unknown", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                 }
                                 TextButton(onClick = {
-                                    // remove attachment
                                     task = task?.copy(attachments = task!!.attachments.filter { it.uri != att.uri })
                                 }) {
                                     Text("Usuń")
@@ -209,19 +257,15 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     Text(if (lat != null && lng != null) "Lokalizacja: %.5f, %.5f".format(lat, lng) else "Brak lokalizacji")
                     Row {
                         Button(onClick = {
-                            // request permission and fetch last location
-                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                            // After permission granted we fetch location (we'll check permission here)
-                            val pm = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                            val pm = context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
                             if (pm == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                                 val fused = LocationServices.getFusedLocationProviderClient(context)
-                                fused.lastLocation.addOnSuccessListener { loc: Location? ->
+                                fused.lastLocation.addOnSuccessListener { loc ->
                                     loc?.let {
                                         task = task?.copy(locationLat = it.latitude, locationLng = it.longitude)
                                     }
                                 }
-                            } else {
-                                // user must accept permission; the launcher will handle prompt. For UX, consider showing rationale before request.
                             }
                         }) {
                             Text("Ustaw na aktualną")
@@ -261,26 +305,33 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     }
                 }
             }
-
-            // Reminder picker
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Przypomnienie:", modifier = Modifier.alignByBaseline())
-                if (reminderMillis != null) {
-                    Text(java.text.DateFormat.getDateTimeInstance().format(Date(reminderMillis!!)))
-                    TextButton(onClick = { reminderMillis = null }) { Text("Usuń") }
-                } else {
-                    Text("brak")
-                }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = {
-                    pickDateTime(reminderMillis) { picked -> reminderMillis = picked }
-                }) {
-                    Text("Ustaw datę/godzinę")
-                }
-            }
-
         }
     }
+}
+
+@Composable
+private fun PriorityChip(p: Priority, selected: Boolean, onSelect: (Priority) -> Unit) {
+    val label = when (p) {
+        Priority.LOW -> "Niski"
+        Priority.MEDIUM -> "Średni"
+        Priority.HIGH -> "Wysoki"
+    }
+    val color = when (p) {
+        Priority.LOW -> Color(0xFF10B981)
+        Priority.MEDIUM -> Color(0xFFF59E0B)
+        Priority.HIGH -> Color(0xFFEF4444)
+    }
+    FilterChip(
+        selected = selected,
+        onClick = { onSelect(p) },
+        label = { Text(label) },
+        leadingIcon = {
+            Box(modifier = Modifier
+                .size(12.dp)
+                .background(color = color, shape = CircleShape))
+        },
+        modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+    )
 }
 
 private val IntentFlagsForUri = (android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)

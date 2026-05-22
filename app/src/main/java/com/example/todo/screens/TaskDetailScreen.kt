@@ -2,18 +2,24 @@ package com.example.todo.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.todo.data.Priority
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -58,14 +64,23 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
         }
     ) { padding ->
         Column(
-            modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize(),
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Column {
                 Text(task.title, style = MaterialTheme.typography.headlineMedium)
-                Row(modifier = Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     AssistChip(onClick = {}, label = { Text("Status: ${task.status}") })
-                    AssistChip(onClick = {}, label = { Text("Prio: ${task.priority}") })
+
+                    // Pojedynczy neutralny element z kolorową kropką wskazującą priorytet
+                    PriorityIndicatorSimple(priority = task.priority)
                 }
             }
 
@@ -83,7 +98,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     Text("Lokalizacja: %.5f, %.5f".format(lat, lng), style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = {
-                        // otwórz mapę z trasą -> użyj geo: lub google maps url
                         val gmmIntentUri = Uri.parse("geo:$lat,$lng?q=$lat,$lng(${Uri.encode(task.title)})")
                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                         context.startActivity(mapIntent)
@@ -106,7 +120,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    // open attachment
                                     val intent = Intent(Intent.ACTION_VIEW).apply {
                                         data = Uri.parse(att.uri)
                                         flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -136,6 +149,42 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PriorityIndicatorSimple(priority: Priority) {
+    val label = when (priority) {
+        Priority.LOW -> "Niski"
+        Priority.MEDIUM -> "Średni"
+        Priority.HIGH -> "Wysoki"
+    }
+    val dotColor = when (priority) {
+        Priority.LOW -> Color(0xFF10B981)
+        Priority.MEDIUM -> Color(0xFFF59E0B)
+        Priority.HIGH -> Color(0xFFEF4444)
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .height(IntrinsicSize.Min)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color = dotColor, shape = CircleShape)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
