@@ -68,18 +68,8 @@ fun SettingsScreen(navController: NavController) {
                 subtitle = "Synchronizacja z kontem Google"
             )
 
-            Spacer(Modifier.height(24.dp))
-            HorizontalDivider()
-
-            Text(
-                text = "ToDo App v1.0.0\nBuilt with Jetpack Compose",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                textAlign = TextAlign.Center
-            )
+//            Spacer(Modifier.height(24.dp))
+//            HorizontalDivider()
         }
     }
 }

@@ -31,6 +31,7 @@ import java.util.*
 import com.google.android.gms.location.LocationServices
 import androidx.activity.result.ActivityResultLauncher
 import android.Manifest
+import android.content.Intent
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,14 +54,14 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
-    var recurrence by remember { mutableStateOf(task?.recurringRule ?: "NONE") }
+    var recurrence by remember { mutableStateOf(task?.recurringRule ?: "brak") }
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(task) {
         task?.let {
             title = it.title
             desc = it.description ?: ""
-            recurrence = it.recurringRule ?: "NONE"
+            recurrence = it.recurringRule ?: "brak"
             reminderMillis = it.reminderTimeMillis
         }
     }
@@ -70,7 +71,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         uri?.let {
             // try to take persistable permission
             try {
-                context.contentResolver.takePersistableUriPermission(it, IntentFlagsForUri)
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: Exception) { }
             val mime = context.contentResolver.getType(it)
             val name = queryDisplayName(context.contentResolver, it) ?: it.toString()
@@ -120,9 +121,9 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 val updatedTask = task?.copy(
                     title = title,
                     description = desc,
-                    recurringRule = if (recurrence == "NONE") null else recurrence,
+                    recurringRule = if (recurrence == "brak") null else recurrence,
                     reminderTimeMillis = reminderMillis
-                ) ?: Task(title = title, description = desc, recurringRule = if (recurrence == "NONE") null else recurrence, reminderTimeMillis = reminderMillis)
+                ) ?: Task(title = title, description = desc, recurringRule = if (recurrence == "brak") null else recurrence, reminderTimeMillis = reminderMillis)
 
                 scope.launch {
                     if (updatedTask.id == 0L) {
@@ -236,7 +237,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             }
 
             // Recurrence selection
-            val recurrenceOptions = listOf("NONE", "DAILY", "WEEKLY", "MONTHLY")
+            val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc")
             var recurrenceMenuExpanded by remember { mutableStateOf(false) }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Powtarzalność:", modifier = Modifier.alignByBaseline())
@@ -253,7 +254,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         recurrenceOptions.forEach { opt ->
                             DropdownMenuItem(text = { Text(opt) }, onClick = {
                                 recurrence = opt
-                                task = task?.copy(recurringRule = if (opt == "NONE") null else opt)
+                                task = task?.copy(recurringRule = if (opt == "brak") null else opt)
                                 recurrenceMenuExpanded = false
                             })
                         }
@@ -278,8 +279,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-            Text("Wskazówka: pamiętaj nadać uprawnienia lokalizacji dla funkcji lokalizacyjnych.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
