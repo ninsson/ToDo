@@ -41,8 +41,29 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
         viewModel.getById(taskId) { t -> taskState = t }
     }
 
-    val task = taskState ?: return
+    val task = taskState
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+
+    // Jeśli zadanie się ładuje, pokaż pusty szkielet z paskiem (zapobiega miganiu)
+    if (task == null) {
+        Scaffold(
+            topBar = {
+                MediumTopAppBar(
+                    title = { Text("Ładowanie...") },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.navigateUp() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Wstecz")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            Box(modifier = Modifier.padding(padding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+        return
+    }
 
     Scaffold(
         topBar = {
