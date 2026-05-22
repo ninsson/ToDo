@@ -9,23 +9,31 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.todo.settings.SettingsRepository
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
+    val context = LocalContext.current
+    val repo = remember { SettingsRepository(context) }
+    val scope = rememberCoroutineScope()
+
+    val notificationsEnabled by repo.notificationsEnabled.collectAsState(initial = true)
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Ustawienia") },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
-                        // Używamy Icons.Default zamiast AutoMirrored
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Wstecz"
@@ -36,11 +44,19 @@ fun SettingsScreen(navController: NavController) {
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            SettingsItem(
-                icon = Icons.Default.Notifications,
-                title = "Powiadomienia",
-                subtitle = "Zarządzaj alertami i dźwiękiem"
+            ListItem(
+                headlineContent = { Text("Powiadomienia") },
+                supportingContent = { Text("Zarządzaj alertami i dźwiękiem") },
+                leadingContent = {
+                    Icon(Icons.Default.Notifications, contentDescription = null)
+                },
+                trailingContent = {
+                    Switch(checked = notificationsEnabled, onCheckedChange = { checked ->
+                        scope.launch { repo.setNotificationsEnabled(checked) }
+                    })
+                }
             )
+
             SettingsItem(
                 icon = Icons.Default.LocationOn,
                 title = "Lokalizacja",
@@ -81,7 +97,6 @@ fun SettingsItem(icon: ImageVector, title: String, subtitle: String) {
             )
         },
         trailingContent = {
-            // KeyboardArrowRight to najlepszy zamiennik dla ChevronRight
             Icon(
                 imageVector = Icons.Default.KeyboardArrowRight,
                 contentDescription = null

@@ -18,7 +18,7 @@ import com.example.todo.data.TaskStatus
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 
-// Material (stable) imports for SwipeToDismiss are in material package and require opt-in
+// Compose Material (stable) swipe imports (wymagają opt-in)
 import androidx.compose.material.DismissDirection
 import androidx.compose.material.DismissValue
 import androidx.compose.material.SwipeToDismiss
@@ -32,11 +32,12 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    // local search state bound to viewModel
+    // search
     var query by remember { mutableStateOf("") }
-    LaunchedEffect(query) {
-        viewModel.setSearchQuery(query)
-    }
+    LaunchedEffect(query) { viewModel.setSearchQuery(query) }
+
+    // Snackbar host for UNDO
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -57,12 +58,14 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("Dodaj zadanie") }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding -> // Ten padding zawiera w sobie wysokość paska stanu i top bara!
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)) {
-
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -85,7 +88,6 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    // Padding: top already taken from topBar; dolne i boczne
                     contentPadding = PaddingValues(
                         top = 8.dp,
                         bottom = padding.calculateBottomPadding() + 16.dp,
@@ -95,7 +97,6 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(tasks, key = { it.id }) { task ->
-                        // dismiss state
                         val dismissState = rememberDismissState(confirmStateChange = { state ->
                             when (state) {
                                 DismissValue.DismissedToEnd -> {
@@ -105,8 +106,21 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                                     true
                                 }
                                 DismissValue.DismissedToStart -> {
-                                    // Left swipe -> delete
-                                    scope.launch { viewModel.delete(task) }
+                                    // Left swipe -> delete with UNDO
+                                    scope.launch {
+                                        // wykonaj delete
+                                        viewModel.delete(task)
+                                        // pokaż snackbar z możliwością cofnięcia
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = "Usunięto zadanie",
+                                            actionLabel = "Cofnij",
+                                            duration = SnackbarDuration.Short
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) {
+                                            // Cofnij: wstaw zadanie ponownie jako nowy rekord (id = 0)
+                                            viewModel.create(task.copy(id = 0L))
+                                        }
+                                    }
                                     true
                                 }
                                 else -> false

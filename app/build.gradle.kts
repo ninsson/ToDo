@@ -82,4 +82,7 @@ dependencies {
 
     implementation("androidx.compose.material:material-icons-extended:1.6.0") // Sprawdź najnowszą wersję
 
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.0")
+
 }
