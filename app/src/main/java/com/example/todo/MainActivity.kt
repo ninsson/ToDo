@@ -15,11 +15,9 @@ import androidx.room.Room
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Włącza tryb Edge-to-Edge w Material 3 – aplikacja zlewa się z paskiem statusu
+        
         enableEdgeToEdge()
 
-        // Prosty builder DB (możesz zainicjalizować przez DI)
         val db = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java,
