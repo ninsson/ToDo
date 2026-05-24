@@ -158,8 +158,11 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                         val dismissState = rememberDismissState(confirmStateChange = { state ->
                             when (state) {
                                 DismissValue.DismissedToEnd -> {
-                                    val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
-                                    scope.launch { viewModel.update(task.copy(status = newStatus)) }
+                                    if (task.status == TaskStatus.DONE) {
+                                        scope.launch { viewModel.reopenTask(task) }
+                                    } else {
+                                        scope.launch { viewModel.completeTask(task) }
+                                    }
                                     false // Odskakuje z powrotem, bo tylko zmieniamy stan (nie usuwamy elementu z listy permanentnie)
                                 }
                                 DismissValue.DismissedToStart -> {
@@ -213,8 +216,11 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                                     task = task,
                                     onClick = { navController.navigate("details/${task.id}") },
                                     onToggleDone = {
-                                        val newStatus = if (task.status == TaskStatus.DONE) TaskStatus.PENDING else TaskStatus.DONE
-                                        scope.launch { viewModel.update(task.copy(status = newStatus)) }
+                                        if (task.status == TaskStatus.DONE) {
+                                            scope.launch { viewModel.reopenTask(task) }
+                                        } else {
+                                            scope.launch { viewModel.completeTask(task) }
+                                        }
                                     }
                                 )
                             }

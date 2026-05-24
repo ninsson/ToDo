@@ -151,6 +151,103 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    // ---------------------------
+    // Recurrence helpers & actions
+    // ---------------------------
+
+    // Oblicza następny timestamp (millis) bazując na currentMillis i regule.
+    // Obsługa prostych polskich nazw: "codziennie", "co tydzień", "co miesiąc"
+    // Dodatkowo prosty własny format: "every:<n>:<unit>" gdzie unit in {days, weeks, months}
+    private fun computeNextMillis(currentMillis: Long?, rule: String?): Long? {
+        if (currentMillis == null || rule.isNullOrBlank()) return null
+        val zone = ZoneId.systemDefault()
+        val zdt = Instant.ofEpochMilli(currentMillis).atZone(zone)
+
+        return when (rule) {
+            "codziennie" -> zdt.plusDays(1).toInstant().toEpochMilli()
+            "co tydzień" -> zdt.plusWeeks(1).toInstant().toEpochMilli()
+            "co miesiąc" -> zdt.plusMonths(1).toInstant().toEpochMilli()
+            else -> {
+                // format: every:count:unit (unit: days|weeks|months)
+                if (rule.startsWith("every:")) {
+                    val parts = rule.split(":")
+                    if (parts.size >= 3) {
+                        val count = parts[1].toLongOrNull() ?: return null
+                        when (parts[2]) {
+                            "days" -> zdt.plusDays(count).toInstant().toEpochMilli()
+                            "weeks" -> zdt.plusWeeks(count).toInstant().toEpochMilli()
+                            "months" -> zdt.plusMonths(count).toInstant().toEpochMilli()
+                            else -> null
+                        }
+                    } else null
+                } else {
+                    null
+                }
+            }
+        }
+    }
+
+    // Oznacz zadanie jako wykonane. Jeśli ma regułę powtarzalności — utwórz kolejne wystąpienie.
+    fun completeTask(task: Task) {
+        // guard: jeśli już DONE – nic nie rób
+        if (task.status == TaskStatus.DONE) return
+
+        viewModelScope.launch {
+            // oznacz istniejące zadanie jako DONE
+            val done = task.copy(status = TaskStatus.DONE)
+            repo.update(done)
+
+            // usuń powiązane schedulery/geofence dla tego (wykonanego) zadania
+            context?.let { ctx ->
+                ReminderScheduler.cancelReminder(ctx, done.id)
+                GeofenceManager.removeGeofenceForTask(ctx, done.id)
+            }
+
+            // jeśli jest reguła powtarzalności, utwórz kolejne wystąpienie
+            val rule = task.recurringRule
+            if (!rule.isNullOrBlank()) {
+                // wybierz bazę do obliczeń: preferuj dueAt, jeśli brak -> reminderTimeMillis
+                val baseMillis = task.dueAt ?: task.reminderTimeMillis
+                val nextBase = computeNextMillis(baseMillis, rule)
+                if (nextBase != null) {
+                    // oblicz przesunięcie przypomnienia względem dueAt (jeśli istniało)
+                    val reminderOffset: Long? = if (task.dueAt != null && task.reminderTimeMillis != null) {
+                        task.reminderTimeMillis!! - task.dueAt!!
+                    } else if (task.dueAt == null && task.reminderTimeMillis != null && baseMillis != null) {
+                        // jeżeli bazą był reminder (nie dueAt), to offset utrzymujemy jako 0 (czyli przypomnienie = nextBase)
+                        task.reminderTimeMillis!! - baseMillis
+                    } else {
+                        null
+                    }
+
+                    val nextReminder = if (reminderOffset != null) nextBase + reminderOffset else null
+
+                    val newTask = task.copy(
+                        id = 0L,
+                        status = TaskStatus.PENDING,
+                        createdAt = System.currentTimeMillis(),
+                        dueAt = if (task.dueAt != null) nextBase else null,
+                        reminderTimeMillis = nextReminder,
+                        // zachowujemy recurringRule aby kolejne też się powtarzały
+                        recurringRule = task.recurringRule
+                    )
+
+                    // użyj istniejącej create(...) żeby poprawnie dodać przypomnienia i geofence
+                    create(newTask) { /* id asynchronicznie */ }
+                }
+            }
+        }
+    }
+
+    // Przywróć zadanie do stanu oczekującego
+    fun reopenTask(task: Task) {
+        if (task.status == TaskStatus.PENDING) return
+        viewModelScope.launch {
+            val reopened = task.copy(status = TaskStatus.PENDING)
+            update(reopened)
+        }
+    }
+
     // cycle priority: LOW -> MEDIUM -> HIGH -> LOW
     fun cyclePriority(task: Task) {
         val next = when (task.priority) {
