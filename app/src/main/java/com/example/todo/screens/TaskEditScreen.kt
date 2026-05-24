@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.ContentResolver
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -13,7 +14,13 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -42,6 +49,8 @@ import com.example.todo.viewmodel.TaskViewModel
 import com.example.todo.settings.SettingsRepository
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -61,79 +70,137 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
 
-    var recurrence by remember { mutableStateOf("brak") } // surowa reguła
+    var recurrence by remember { mutableStateOf("brak") }
     var recurrenceLabel by remember { mutableStateOf("Brak") }
 
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
     var dueMillis by remember { mutableStateOf<Long?>(null) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
 
-    // category state
     var category by remember { mutableStateOf<String?>(null) }
     var categoryMenuExpanded by remember { mutableStateOf(false) }
 
-    // dialog - niestandardowa reguła
     var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
     var customCount by remember { mutableStateOf("1") }
     var customUnit by remember { mutableStateOf("dni") }
 
-    // ADDRESS input states
+    // ADDRESS / GEOCODER states
     var addressInput by remember { mutableStateOf("") }
-    var geocodeLoading by remember { mutableStateOf(false) }
-    var geocodeError by remember { mutableStateOf<String?>(null) }
+    var geoSuggestions by remember { mutableStateOf<List<Pair<String, Pair<Double, Double>>>>(emptyList()) }
+    var suggestionsVisible by remember { mutableStateOf(false) }
+    var suggestionsLoading by remember { mutableStateOf(false) }
+    var suggestionsError by remember { mutableStateOf<String?>(null) }
 
-    fun ruleToDisplay(rule: String?): String {
-        if (rule.isNullOrBlank() || rule == "brak") return "Brak"
-        return when (rule) {
-            "codziennie" -> "Codziennie"
-            "co tydzień" -> "Co tydzień"
-            "co miesiąc" -> "Co miesiąc"
-            else -> {
-                if (rule.startsWith("every:")) {
-                    val parts = rule.split(":")
-                    if (parts.size >= 3) {
-                        val n = parts[1].toIntOrNull() ?: return rule
-                        val unitKey = parts[2]
-                        val unitPol = when (unitKey) {
-                            "days" -> if (n == 1) "dzień" else "dni"
-                            "weeks" -> if (n == 1) "tydzień" else "tygodnie"
-                            "months" -> if (n == 1) "miesiąc" else "miesiące"
-                            else -> unitKey
+    var debounceJob by remember { mutableStateOf<Job?>(null) }
+
+    val fused = LocationServices.getFusedLocationProviderClient(context)
+    var lastCityHint by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try {
+            fused.lastLocation.addOnSuccessListener { loc ->
+                loc?.let {
+                    try {
+                        val gc = Geocoder(context, Locale.getDefault())
+                        val list = gc.getFromLocation(it.latitude, it.longitude, 1)
+                        if (!list.isNullOrEmpty()) {
+                            lastCityHint = list[0].locality ?: list[0].subAdminArea ?: list[0].adminArea
                         }
-                        return if (n == 1) {
-                            when (unitKey) {
-                                "days" -> "Codziennie"
-                                "weeks" -> "Co tydzień"
-                                "months" -> "Co miesiąc"
-                                else -> "Co $n $unitPol"
-                            }
-                        } else {
-                            "Co $n $unitPol"
-                        }
-                    } else {
-                        rule
-                    }
-                } else {
-                    rule
+                    } catch (_: Exception) { }
                 }
+            }
+        } catch (_: SecurityException) { }
+    }
+
+    suspend fun geocoderPredictions(context: Context, query: String, maxResults: Int = 6): List<Pair<String, Pair<Double, Double>>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val gc = Geocoder(context, Locale.getDefault())
+                val q = if (!lastCityHint.isNullOrBlank() && !query.contains(lastCityHint!!, ignoreCase = true)) {
+                    "$query, ${lastCityHint}"
+                } else query
+                val results = gc.getFromLocationName(q, maxResults) ?: emptyList()
+                results.map { addr ->
+                    val display = addr.getAddressLine(0) ?: listOfNotNull(addr.featureName, addr.thoroughfare, addr.locality).joinToString(", ")
+                    Pair(display, Pair(addr.latitude, addr.longitude))
+                }
+            } catch (e: Exception) {
+                emptyList()
             }
         }
     }
 
-    fun parseEveryRule(rule: String?): Pair<String, String>? {
-        if (rule == null) return null
-        if (!rule.startsWith("every:")) return null
-        val parts = rule.split(":")
-        if (parts.size < 3) return null
-        val n = parts[1]
-        val unitKey = parts[2]
-        val unitPol = when (unitKey) {
-            "days" -> "dni"
-            "weeks" -> "tygodnie"
-            "months" -> "miesiące"
-            else -> "dni"
+    LaunchedEffect(addressInput) {
+        debounceJob?.cancel()
+        if (addressInput.isBlank()) {
+            geoSuggestions = emptyList()
+            suggestionsVisible = false
+            suggestionsLoading = false
+            suggestionsError = null
+            return@LaunchedEffect
         }
-        return Pair(n, unitPol)
+        suggestionsLoading = true
+        debounceJob = scope.launch {
+            delay(400)
+            val preds = geocoderPredictions(context, addressInput, 6)
+            geoSuggestions = preds
+            suggestionsVisible = preds.isNotEmpty()
+            suggestionsLoading = false
+            suggestionsError = if (preds.isEmpty()) "Brak podpowiedzi" else null
+        }
+    }
+
+    val pickDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        uri?.let {
+            try {
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) { }
+            val mime = context.contentResolver.getType(it)
+            val name = queryDisplayName(context.contentResolver, it) ?: it.toString()
+            val att = Attachment(it.toString(), mime, name)
+            task = task?.copy(attachments = (task?.attachments ?: emptyList()) + att)
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            try {
+                fused.lastLocation.addOnSuccessListener { loc ->
+                    loc?.let {
+                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                    }
+                }
+            } catch (e: SecurityException) { }
+        } else {
+            Toast.makeText(context, "Brak zgody na lokalizację", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val mapPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val lat = data?.getDoubleExtra("lat", Double.NaN) ?: Double.NaN
+            val lng = data?.getDoubleExtra("lng", Double.NaN) ?: Double.NaN
+            if (!lat.isNaN() && !lng.isNaN()) {
+                val newLoc = TaskLocation(lat, lng, 100f, "Wybrane miejsce")
+                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+            }
+        }
+    }
+
+    fun onSelectGeoSuggestion(item: Pair<String, Pair<Double, Double>>) {
+        val label = item.first
+        val lat = item.second.first
+        val lng = item.second.second
+        val newLoc = TaskLocation(lat, lng, 100f, label)
+        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+
+        addressInput = ""
+        geoSuggestions = emptyList()
+        suggestionsVisible = false
+        suggestionsError = null
+        Toast.makeText(context, "Dodano: $label", Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(taskId) {
@@ -157,85 +224,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             task = Task(title = "", description = "")
             recurrence = "brak"
             recurrenceLabel = ruleToDisplay(recurrence)
-        }
-    }
-
-    val pickDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri?.let {
-            try {
-                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: Exception) { }
-            val mime = context.contentResolver.getType(it)
-            val name = queryDisplayName(context.contentResolver, it) ?: it.toString()
-            val att = Attachment(it.toString(), mime, name)
-            task = task?.copy(attachments = (task?.attachments ?: emptyList()) + att)
-        }
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            val fused = LocationServices.getFusedLocationProviderClient(context)
-            try {
-                fused.lastLocation.addOnSuccessListener { loc ->
-                    loc?.let {
-                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
-                        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
-                    }
-                }
-            } catch (e: SecurityException) { }
-        }
-    }
-
-    // Launcher do otwierania MapPickActivity i odbierania wyniku
-    val mapPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val lat = data?.getDoubleExtra("lat", Double.NaN) ?: Double.NaN
-            val lng = data?.getDoubleExtra("lng", Double.NaN) ?: Double.NaN
-            if (!lat.isNaN() && !lng.isNaN()) {
-                val newLoc = TaskLocation(lat, lng, 100f, "Wybrane miejsce")
-                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
-            }
-        }
-    }
-
-    // Funkcja geokodująca wpisany adres
-    fun addLocationFromAddress(addressText: String) {
-        if (addressText.isBlank()) {
-            geocodeError = "Podaj adres"
-            return
-        }
-        geocodeError = null
-        geocodeLoading = true
-        scope.launch {
-            val addresses = withContext(Dispatchers.IO) {
-                try {
-                    val geocoder = Geocoder(context, Locale.getDefault())
-                    geocoder.getFromLocationName(addressText, 3)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-            geocodeLoading = false
-            if (addresses == null) {
-                geocodeError = "Błąd geokodowania"
-                Toast.makeText(context, "Błąd geokodowania. Spróbuj ponownie.", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            if (addresses.isEmpty()) {
-                geocodeError = "Nie znaleziono adresu"
-                Toast.makeText(context, "Nie znaleziono adresu", Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            val adr = addresses.first()
-            val lat = adr.latitude
-            val lng = adr.longitude
-            val label = adr.getAddressLine(0) ?: addressText
-            val newLoc = TaskLocation(lat, lng, 100f, label)
-            task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
-            addressInput = ""
-            geocodeError = null
-            Toast.makeText(context, "Dodano lokalizację: $label", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -360,7 +348,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Priorytet
             Column {
                 Text("Priorytet", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -374,14 +361,14 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Termin
+
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -398,7 +385,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    // Przypomnienie
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -415,7 +401,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    // Powtarzalność
                     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
                     val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc", "własny")
 
@@ -465,9 +450,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                             confirmButton = {
                                 TextButton(onClick = {
                                     val n = customCount.toLongOrNull() ?: 0L
-                                    if (n <= 0L) {
-                                        return@TextButton
-                                    }
+                                    if (n <= 0L) return@TextButton
                                     val unitKey = when (customUnit) {
                                         "dni" -> "days"
                                         "tygodnie" -> "weeks"
@@ -485,9 +468,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                 }
                             },
                             dismissButton = {
-                                TextButton(onClick = { showCustomRecurrenceDialog = false }) {
-                                    Text("Anuluj")
-                                }
+                                TextButton(onClick = { showCustomRecurrenceDialog = false }) { Text("Anuluj") }
                             },
                             title = { Text("Niestandardowa powtarzalność") },
                             text = {
@@ -512,7 +493,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                                 label = { Text("Jednostka") },
                                                 trailingIcon = {
                                                     IconButton(onClick = { unitMenuExpanded = true }) {
-                                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                                        Icon(Icons.Default.ArrowDropDown, null)
                                                     }
                                                 },
                                                 modifier = Modifier.width(160.dp)
@@ -531,7 +512,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Załączniki
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -576,10 +556,9 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // --- ZAKTUALIZOWANA SEKCJA: LOKALIZACJE ---
+            // --- SEKCJA: LOKALIZACJE ---
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Nagłówek sekcji
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -588,51 +567,89 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Pole adresu (z wyszukiwaniem przeniesionym do środka)
+                    // Pole adresu
                     OutlinedTextField(
                         value = addressInput,
-                        onValueChange = { addressInput = it },
+                        onValueChange = {
+                            addressInput = it
+                            suggestionsVisible = true
+                        },
                         label = { Text("Znajdź po adresie...") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        leadingIcon = {
-                            Icon(Icons.Default.Search, contentDescription = null)
-                        },
+                        leadingIcon = { Icon(Icons.Default.Search, null) },
                         trailingIcon = {
-                            if (geocodeLoading) {
+                            if (suggestionsLoading) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                IconButton(
-                                    onClick = { addLocationFromAddress(addressInput) },
-                                    enabled = addressInput.isNotBlank()
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = "Dodaj z adresu", tint = MaterialTheme.colorScheme.primary)
+                            } else if (addressInput.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    addressInput = ""
+                                    suggestionsVisible = false
+                                }) {
+                                    Icon(Icons.Default.Clear, "Wyczyść")
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    // Inline podpowiedzi (NIE jako okno Popup/DropdownMenu - żeby nie chowało klawiatury)
+                    AnimatedVisibility(
+                        visible = suggestionsVisible && geoSuggestions.isNotEmpty(),
+                        enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                    ) {
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+                        ) {
+                            Column {
+                                geoSuggestions.forEach { item ->
+                                    val (label, coords) = item
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onSelectGeoSuggestion(item) }
+                                            .padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(label, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                            Text("%.5f, %.5f".format(coords.first, coords.second), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                                 }
                             }
                         }
-                    )
+                    }
 
-                    geocodeError?.let {
+                    suggestionsError?.let {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Przyciski szybkich akcji (pół na pół)
+                    // Przyciski akcji (Moja pozycja / Wybierz na mapie)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilledTonalButton(
                             onClick = {
                                 val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
                                 if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                                    val fused = LocationServices.getFusedLocationProviderClient(context)
-                                    fused.lastLocation.addOnSuccessListener { loc ->
-                                        loc?.let {
-                                            val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
-                                            task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                    try {
+                                        fused.lastLocation.addOnSuccessListener { loc ->
+                                            loc?.let {
+                                                val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                                                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                            }
                                         }
-                                    }
+                                    } catch (e: SecurityException) { }
                                 } else {
                                     locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
@@ -709,11 +726,64 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     }
                 }
             }
-            // --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
 
             Spacer(modifier = Modifier.height(72.dp))
         }
     }
+}
+
+private fun ruleToDisplay(rule: String?): String {
+    if (rule.isNullOrBlank() || rule == "brak") return "Brak"
+    return when (rule) {
+        "codziennie" -> "Codziennie"
+        "co tydzień" -> "Co tydzień"
+        "co miesiąc" -> "Co miesiąc"
+        else -> {
+            if (rule.startsWith("every:")) {
+                val parts = rule.split(":")
+                if (parts.size >= 3) {
+                    val n = parts[1].toIntOrNull() ?: return rule
+                    val unitKey = parts[2]
+                    val unitPol = when (unitKey) {
+                        "days" -> if (n == 1) "dzień" else "dni"
+                        "weeks" -> if (n == 1) "tydzień" else "tygodnie"
+                        "months" -> if (n == 1) "miesiąc" else "miesiące"
+                        else -> unitKey
+                    }
+                    return if (n == 1) {
+                        when (unitKey) {
+                            "days" -> "Codziennie"
+                            "weeks" -> "Co tydzień"
+                            "months" -> "Co miesiąc"
+                            else -> "Co $n $unitPol"
+                        }
+                    } else {
+                        "Co $n $unitPol"
+                    }
+                } else {
+                    rule
+                }
+            } else {
+                rule
+            }
+        }
+    }
+}
+
+private fun parseEveryRule(rule: String?): Pair<String, String>? {
+    if (rule == null) return null
+    if (!rule.startsWith("every:")) return null
+    val parts = rule.split(":")
+    if (parts.size < 3) return null
+    val n = parts[1]
+    val unitKey = parts[2]
+    val unitPol = when (unitKey) {
+        "days" -> "dni"
+        "weeks" -> "tygodnie"
+        "months" -> "miesiące"
+        else -> "dni"
+    }
+    return Pair(n, unitPol)
 }
 
 @Composable
