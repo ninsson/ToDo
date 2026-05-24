@@ -44,7 +44,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
     val task = taskState
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
 
-    // Jeśli zadanie się ładuje, pokaż pusty szkielet z paskiem (zapobiega miganiu)
     if (task == null) {
         Scaffold(
             topBar = {
@@ -99,7 +98,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Sekcja: Nagłówek i status
             Column {
                 Text(
                     text = task.title,
@@ -118,7 +116,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     )
                     PriorityIndicatorSimple(priority = task.priority)
 
-                    // Kategoria: pokaż jako chip jeśli istnieje
                     if (!task.category.isNullOrBlank()) {
                         AssistChip(
                             onClick = {},
@@ -132,7 +129,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // Sekcja: Opis
             if (!task.description.isNullOrBlank()) {
                 Text(
                     text = task.description!!,
@@ -148,14 +144,11 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 )
             }
 
-            // Sekcja: Czas i przypomnienia (Główna karta)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Termin
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.DateRange, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(12.dp))
@@ -169,7 +162,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                         }
                     }
 
-                    // Przypomnienie
                     if (task.reminderTimeMillis != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -185,7 +177,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                         }
                     }
 
-                    // Cykliczność
                     if (task.recurringRule != null) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -203,36 +194,57 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // Sekcja: Lokalizacja
-            if (task.locationLat != null && task.locationLng != null) {
+            // Sekcja: Lokalizacje (obsługa listy)
+            if (task.locations.isNotEmpty()) {
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Lokalizacja", fontWeight = FontWeight.Bold)
-                                Text("%.5f, %.5f".format(task.locationLat, task.locationLng), style = MaterialTheme.typography.bodyMedium)
-                            }
+                            Text("Lokalizacje", fontWeight = FontWeight.Bold)
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                val gmmIntentUri = Uri.parse("geo:${task.locationLat},${task.locationLng}?q=${task.locationLat},${task.locationLng}(${Uri.encode(task.title)})")
-                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                context.startActivity(mapIntent)
-                            },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Otwórz w Mapach")
+
+                        task.locations.forEachIndexed { idx, loc ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(loc.label ?: "Lokalizacja ${idx + 1}", fontWeight = FontWeight.Medium)
+                                    Text("%.5f, %.5f · %dm".format(loc.lat, loc.lng, loc.radiusMeters.toInt()), style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(onClick = {
+                                    // otwórz trasę (nawigacja)
+                                    val uri = Uri.parse("google.navigation:q=${loc.lat},${loc.lng}")
+                                    val i = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
+                                    context.startActivity(i)
+                                }) {
+                                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Prowadź")
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(task.title)})")
+                                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                        context.startActivity(mapIntent)
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Otwórz w Mapach")
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // Sekcja: Załączniki
             if (task.attachments.isNotEmpty()) {
                 Text("Załączniki (${task.attachments.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -250,7 +262,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                                         }
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
-                                        // Opcjonalnie obsłuż błąd braku aplikacji do otwarcia pliku
                                     }
                                 }
                                 .padding(16.dp),
@@ -275,17 +286,15 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // Wypełniacz, żeby zepchnąć metadane na sam dół (opcjonalnie, scroll i tak to ogarnie)
             Spacer(Modifier.height(16.dp))
 
-            // Sekcja: Informacje techniczne / Metadane
             OutlinedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.outlinedCardColors(containerColor = Color.Transparent)
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text("Szczegóły techniczne", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         Text(
@@ -293,7 +302,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        // pokaż kategorię też w metadanych (opcjonalnie)
                         if (!task.category.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
@@ -306,7 +314,6 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // Margines dolny
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

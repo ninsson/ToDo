@@ -2,6 +2,7 @@ package com.example.todo.notifications
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import androidx.core.app.NotificationCompat
 
@@ -14,14 +15,17 @@ object NotificationHelper {
         nm.createNotificationChannel(channel)
     }
 
-    fun build(context: Context, title: String, body: String, id: Int = 0) {
+    /**
+     * contentIntent: opcjonalny PendingIntent uruchamiany po tapnięciu powiadomienia (np. nawigacja)
+     */
+    fun build(context: Context, title: String, body: String, id: Int = 0, contentIntent: PendingIntent? = null) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(body)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setAutoCancel(true)
-            .build()
-        nm.notify(id, n)
+        contentIntent?.let { builder.setContentIntent(it) }
+        nm.notify(id, builder.build())
     }
 }

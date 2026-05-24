@@ -3,7 +3,9 @@ package com.example.todo.notifications
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.util.Log
+import com.example.todo.data.TaskLocation
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
@@ -11,6 +13,8 @@ import com.google.android.gms.location.LocationServices
 import kotlin.math.max
 
 private const val TAG = "GeofenceManager"
+private const val PREFS_NAME = "geofence_prefs"
+private const val PREF_KEY_PREFIX = "task_geofences_"
 
 object GeofenceManager {
     private fun geofencingClient(context: Context): GeofencingClient =
@@ -22,46 +26,73 @@ object GeofenceManager {
         return PendingIntent.getBroadcast(context, 0, intent, flags)
     }
 
-    fun addGeofenceForTask(context: Context, taskId: Long, lat: Double, lng: Double, radiusMeters: Float = 100f) {
-        val geofence = Geofence.Builder()
-            .setRequestId("task_$taskId")
-            .setCircularRegion(lat, lng, max(50f, radiusMeters))
-            .setExpirationDuration(Geofence.NEVER_EXPIRE)
-            .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
-            .build()
+    private fun prefs(context: Context): SharedPreferences =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-        val request = GeofencingRequest.Builder()
-            .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
-            .addGeofence(geofence)
-            .build()
-
+    /**
+     * Dodaj geofence'y dla danego zadania. Przechowujemy requestId list w SharedPreferences,
+     * żeby móc je później usunąć.
+     *
+     * requestId format: "task_{taskId}_{index}"
+     */
+    fun addGeofencesForTask(context: Context, taskId: Long, locations: List<TaskLocation>) {
         val client = geofencingClient(context)
-        // first remove existing geofence with same id (best-effort), then add
-        client.removeGeofences(listOf("task_$taskId"))
+        val pending = makePendingIntent(context)
+        val newIds = locations.mapIndexed { idx, _ -> "task_${taskId}_$idx" }
+
+        // remove previous ones (best-effort)
+        val oldIds = prefs(context).getStringSet(PREF_KEY_PREFIX + taskId, emptySet())?.toList() ?: emptyList()
+        if (oldIds.isNotEmpty()) {
+            client.removeGeofences(oldIds).addOnSuccessListener {
+                Log.d(TAG, "Removed old geofences for task $taskId")
+            }.addOnFailureListener { e ->
+                Log.w(TAG, "Failed to remove old geofences for task $taskId: ${e.message}", e)
+            }
+        }
+
+        // build request with all geofences
+        val builder = GeofencingRequest.Builder().setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+        locations.forEachIndexed { idx, loc ->
+            val id = "task_${taskId}_$idx"
+            val gf = Geofence.Builder()
+                .setRequestId(id)
+                .setCircularRegion(loc.lat, loc.lng, max(50f, loc.radiusMeters))
+                .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
+                .build()
+            builder.addGeofence(gf)
+        }
+        val request = builder.build()
+
+        client.addGeofences(request, pending)
             .addOnSuccessListener {
-                client.addGeofences(request, makePendingIntent(context))
-                    .addOnSuccessListener {
-                        Log.d(TAG, "Geofence added for task $taskId")
-                    }
-                    .addOnFailureListener { e ->
-                        Log.w(TAG, "Failed to add geofence for task $taskId: ${e.message}", e)
-                    }
+                Log.d(TAG, "Geofences added for task $taskId (count=${locations.size})")
+                // store ids
+                prefs(context).edit().putStringSet(PREF_KEY_PREFIX + taskId, newIds.toSet()).apply()
             }
             .addOnFailureListener { e ->
-                Log.w(TAG, "Failed to remove existing geofence for task $taskId: ${e.message}", e)
-                // try to add anyway
-                client.addGeofences(request, makePendingIntent(context))
-                    .addOnSuccessListener { Log.d(TAG, "Geofence added for task $taskId (after remove failure)") }
-                    .addOnFailureListener { ex ->
-                        Log.w(TAG, "Failed to add geofence for task $taskId: ${ex.message}", ex)
-                    }
+                Log.w(TAG, "Failed to add geofences for task $taskId: ${e.message}", e)
             }
     }
 
-    fun removeGeofenceForTask(context: Context, taskId: Long) {
+    /**
+     * Usuń wszystkie geofence'y powiązane z zadaniem (korzysta z listy requestId w prefs).
+     */
+    fun removeGeofencesForTask(context: Context, taskId: Long) {
         val client = geofencingClient(context)
-        client.removeGeofences(listOf("task_$taskId"))
-            .addOnSuccessListener { Log.d(TAG, "Geofence removed for task $taskId") }
-            .addOnFailureListener { e -> Log.w(TAG, "Failed to remove geofence for task $taskId: ${e.message}", e) }
+        val key = PREF_KEY_PREFIX + taskId
+        val ids = prefs(context).getStringSet(key, emptySet())?.toList() ?: emptyList()
+        if (ids.isNotEmpty()) {
+            client.removeGeofences(ids)
+                .addOnSuccessListener {
+                    Log.d(TAG, "Geofences removed for task $taskId")
+                    prefs(context).edit().remove(key).apply()
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "Failed to remove geofences for task $taskId: ${e.message}", e)
+                    // still remove key to avoid stale ids (optional)
+                    prefs(context).edit().remove(key).apply()
+                }
+        }
     }
 }

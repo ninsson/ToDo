@@ -34,6 +34,7 @@ import androidx.navigation.NavController
 import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
 import com.example.todo.data.Task
+import com.example.todo.data.TaskLocation
 import com.example.todo.viewmodel.TaskViewModel
 import com.example.todo.settings.SettingsRepository
 import com.google.android.gms.location.LocationServices
@@ -69,8 +70,9 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     // dialog - niestandardowa reguła
     var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
     var customCount by remember { mutableStateOf("1") }
-    var customUnit by remember { mutableStateOf("dni") } // wyświetlany tekst, mapujemy do days/weeks/months
+    var customUnit by remember { mutableStateOf("dni") }
 
+    // Helpers ruleToDisplay, parseEveryRule (skopiowane z oryginału)
     fun ruleToDisplay(rule: String?): String {
         if (rule.isNullOrBlank() || rule == "brak") return "Brak"
         return when (rule) {
@@ -137,7 +139,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 dueMillis = t?.dueAt
                 priority = t?.priority ?: Priority.MEDIUM
                 category = t?.category
-                // prefilling custom dialog if needed
                 parseEveryRule(recurrence)?.let { (count, unitPol) ->
                     customCount = count
                     customUnit = unitPol
@@ -167,9 +168,13 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             val fused = LocationServices.getFusedLocationProviderClient(context)
             try {
                 fused.lastLocation.addOnSuccessListener { loc ->
-                    loc?.let { task = task?.copy(locationLat = it.latitude, locationLng = it.longitude) }
+                    loc?.let {
+                        // add new location to list
+                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                    }
                 }
-            } catch (e: SecurityException) { /* Ignoruj, jeśli brak uprawnień mimo przyznania */ }
+            } catch (e: SecurityException) { }
         }
     }
 
@@ -245,7 +250,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
 
-            // Sekcja: Podstawowe informacje
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
@@ -264,7 +268,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Sekcja: Kategoria (nowość)
+            // Kategoria, Priorytet, terminy etc. (bez zmian) - skopiowane fragmenty z oryginału
             Column {
                 Text("Kategoria", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -296,7 +300,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Sekcja: Priorytet
+            // Priorytet
             Column {
                 Text("Priorytet", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -312,13 +316,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Sekcja: Daty i czas
+            // Daty i przypomnienia (bez zmian)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
                     // Termin
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -353,7 +356,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    // Cykliczność
+                    // Powtarzalność (skopiowane)
                     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
                     val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc", "własny")
 
@@ -397,7 +400,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    // Dialog: niestandardowa reguła
                     if (showCustomRecurrenceDialog) {
                         AlertDialog(
                             onDismissRequest = { showCustomRecurrenceDialog = false },
@@ -470,7 +472,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Sekcja: Załączniki
+            // Załączniki (bez zmian)
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -515,21 +517,44 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Sekcja: Lokalizacja
+            // Sekcja: Lokalizacje (lista)
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    val lat = task?.locationLat
-                    val lng = task?.locationLng
+                    Text("Lokalizacje", fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Lokalizacja", fontWeight = FontWeight.Bold)
-                            if (lat != null && lng != null) {
-                                Text("%.5f, %.5f".format(lat, lng), style = MaterialTheme.typography.bodyMedium)
-                            } else {
-                                Text("Brak przypisanej lokalizacji", style = MaterialTheme.typography.bodySmall)
+                    val locations = task?.locations ?: emptyList()
+                    if (locations.isEmpty()) {
+                        Text("Brak przypisanych lokalizacji", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            locations.forEachIndexed { idx, loc ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(loc.label ?: "Miejsce ${idx + 1}", fontWeight = FontWeight.Medium)
+                                        Text("%.5f, %.5f · %dm".format(loc.lat, loc.lng, loc.radiusMeters.toInt()), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    IconButton(onClick = {
+                                        task = task?.copy(locations = locations.filterIndexed { i, _ -> i != idx })
+                                    }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
+                                    }
+                                    IconButton(onClick = {
+                                        // otwórz w mapach
+                                        val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
+                                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                        context.startActivity(mapIntent)
+                                    }) {
+                                        Icon(Icons.Default.Map, contentDescription = "Otwórz w Mapach")
+                                    }
+                                }
                             }
                         }
                     }
@@ -537,29 +562,35 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        if (lat != null) {
-                            TextButton(onClick = { task = task?.copy(locationLat = null, locationLng = null) }) {
-                                Text("Usuń", color = MaterialTheme.colorScheme.error)
-                            }
+                        TextButton(onClick = {
+                            // usuń wszystkie
+                            task = task?.copy(locations = emptyList())
+                        }) {
+                            Text("Usuń wszystkie", color = MaterialTheme.colorScheme.error)
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         TextButton(onClick = {
                             val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
                             if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
                                 val fused = LocationServices.getFusedLocationProviderClient(context)
                                 fused.lastLocation.addOnSuccessListener { loc ->
-                                    loc?.let { task = task?.copy(locationLat = it.latitude, locationLng = it.longitude) }
+                                    loc?.let {
+                                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                                        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                    }
                                 }
                             } else {
                                 locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                             }
                         }) {
-                            Text("Ustaw aktualną")
+                            Icon(Icons.Default.LocationOn, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Dodaj aktualną")
                         }
                     }
                 }
             }
 
-            // Margines pod przyciskiem FAB
             Spacer(modifier = Modifier.height(72.dp))
         }
     }

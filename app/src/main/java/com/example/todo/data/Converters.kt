@@ -4,7 +4,6 @@ import androidx.room.TypeConverter
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import java.lang.IllegalArgumentException
 
 class Converters {
     private val json = Json { encodeDefaults = true }
@@ -27,5 +26,14 @@ class Converters {
 
     @TypeConverter
     fun toAttachments(data: String?): List<Attachment> =
+        if (data.isNullOrEmpty()) emptyList() else json.decodeFromString(data)
+
+    // --- locations converters ---
+    @TypeConverter
+    fun fromLocations(list: List<TaskLocation>?): String? =
+        list?.let { json.encodeToString(it) }
+
+    @TypeConverter
+    fun toLocations(data: String?): List<TaskLocation> =
         if (data.isNullOrEmpty()) emptyList() else json.decodeFromString(data)
 }

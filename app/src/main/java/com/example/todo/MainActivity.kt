@@ -3,14 +3,13 @@ package com.example.todo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge // DODANY IMPORT
+import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.todo.ui.theme.ToDoTheme
 import com.example.todo.MainNavHost
 import com.example.todo.viewmodel.TaskViewModel
-import com.example.todo.data.AppDatabase
 import com.example.todo.repo.TaskRepository
-import androidx.room.Room
+import com.example.todo.DatabaseProvider
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,17 +17,11 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            "todo-db"
-        ).fallbackToDestructiveMigration().build()
-
+        val db = DatabaseProvider.get(applicationContext)
         val repo = TaskRepository(db.taskDao())
 
         setContent {
             ToDoTheme {
-                // Przekazujemy applicationContext do factory, aby ViewModel mógł planować przypomnienia
                 val vm: TaskViewModel = viewModel(factory = TaskViewModel.Factory(repo, applicationContext))
                 MainNavHost(viewModel = vm)
             }

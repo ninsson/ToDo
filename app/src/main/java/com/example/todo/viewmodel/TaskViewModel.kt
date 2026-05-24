@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.todo.data.Priority
 import com.example.todo.data.Task
+import com.example.todo.data.TaskLocation
 import com.example.todo.data.TaskStatus
 import com.example.todo.notifications.GeofenceManager
 import com.example.todo.notifications.ReminderScheduler
@@ -14,14 +15,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.ZonedDateTime
 
 enum class SortOption { PRIORITY, DUE_DATE, CREATED_AT }
 enum class FilterOption { ALL, TODAY, OVERDUE, HIGH_PRIORITY, PENDING, DONE }
@@ -70,14 +69,12 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             FilterOption.DONE -> result.filter { it.status == TaskStatus.DONE }
         }
 
-        // sort: use explicit Comparators to avoid lambda/generic inference issues
+        // sort
         val sorted = when (sortOpt) {
             SortOption.PRIORITY -> {
                 result.sortedWith(Comparator { a, b ->
-                    // priority descending
                     val pCmp = b.priority.ordinal.compareTo(a.priority.ordinal)
                     if (pCmp != 0) return@Comparator pCmp
-                    // then due date ascending (nulls go to end)
                     val da = a.dueAt ?: Long.MAX_VALUE
                     val db = b.dueAt ?: Long.MAX_VALUE
                     return@Comparator da.compareTo(db)
@@ -89,7 +86,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                     val db = b.dueAt ?: Long.MAX_VALUE
                     val dCmp = da.compareTo(db)
                     if (dCmp != 0) return@Comparator dCmp
-                    // then priority descending
                     return@Comparator b.priority.ordinal.compareTo(a.priority.ordinal)
                 })
             }
@@ -98,23 +94,15 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             }
         }
 
-        // Ensure done tasks are shown at the bottom:
-        // partition into not-done and done, then concatenate so not-done appear first.
         val (notDone, done) = sorted.partition { it.status != TaskStatus.DONE }
         notDone + done
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    // Backwards compat alias
     val tasks: StateFlow<List<Task>> = visibleTasks
 
-    /**
-     * Wstawienie zadania do bazy.
-     * Jeśli zadanie jest powtarzalne i nie ma dueAt, ustawiamy dueAt = createdAt (żeby było widoczne w UI).
-     */
     fun create(task: Task, onDone: (Long) -> Unit = {}) {
         viewModelScope.launch {
             val taskToInsert = if (!task.recurringRule.isNullOrBlank() && task.dueAt == null) {
-                // traktujemy createdAt jako początek serii i ustawiamy dueAt, żeby wyświetlało się w liście/przypomnieniu
                 task.copy(dueAt = task.createdAt)
             } else {
                 task
@@ -123,10 +111,9 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             val id = repo.insert(taskToInsert)
             context?.let { ctx ->
                 if (taskToInsert.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, taskToInsert.copy(id = id))
-                if (taskToInsert.locationLat != null && taskToInsert.locationLng != null) GeofenceManager.addGeofenceForTask(ctx, id,
-                    taskToInsert.locationLat!!,
-                    taskToInsert.locationLng!!
-                )
+                if (taskToInsert.locations.isNotEmpty()) {
+                    GeofenceManager.addGeofencesForTask(ctx, id, taskToInsert.locations)
+                }
             }
             onDone(id)
         }
@@ -139,11 +126,10 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                 ReminderScheduler.cancelReminder(ctx, task.id)
                 if (task.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, task)
 
-                GeofenceManager.removeGeofenceForTask(ctx, task.id)
-                if (task.locationLat != null && task.locationLng != null) {
-                    GeofenceManager.addGeofenceForTask(ctx, task.id, task.locationLat!!,
-                        task.locationLng!!
-                    )
+                // geofences
+                GeofenceManager.removeGeofencesForTask(ctx, task.id)
+                if (task.locations.isNotEmpty()) {
+                    GeofenceManager.addGeofencesForTask(ctx, task.id, task.locations)
                 }
             }
         }
@@ -154,7 +140,7 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             repo.delete(task)
             context?.let { ctx ->
                 ReminderScheduler.cancelReminder(ctx, task.id)
-                GeofenceManager.removeGeofenceForTask(ctx, task.id)
+                GeofenceManager.removeGeofencesForTask(ctx, task.id)
             }
         }
     }
@@ -165,13 +151,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
-    // ---------------------------
-    // Recurrence helpers & actions
-    // ---------------------------
-
-    // Oblicza następny timestamp (millis) bazując na currentMillis i regule.
-    // Obsługa prostych polskich nazw: "codziennie", "co tydzień", "co miesiąc"
-    // Dodatkowo prosty własny format: "every:<n>:<unit>" gdzie unit in {days, weeks, months}
     private fun computeNextMillis(currentMillis: Long?, rule: String?): Long? {
         if (currentMillis == null || rule.isNullOrBlank()) return null
         val zone = ZoneId.systemDefault()
@@ -182,7 +161,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             "co tydzień" -> zdt.plusWeeks(1).toInstant().toEpochMilli()
             "co miesiąc" -> zdt.plusMonths(1).toInstant().toEpochMilli()
             else -> {
-                // format: every:count:unit (unit: days|weeks|months)
                 if (rule.startsWith("every:")) {
                     val parts = rule.split(":")
                     if (parts.size >= 3) {
@@ -201,60 +179,42 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
-    /**
-     * Oznacz zadanie jako wykonane. Jeśli ma regułę powtarzalności — utwórz kolejne wystąpienie.
-     *
-     * Zmiana: gdy brak dueAt, traktujemy createdAt jako początek serii (base) i dla nowego wystąpienia
-     * zawsze ustawiamy dueAt = nextBase (żeby nowe wystąpienie miało termin i było widoczne).
-     */
     fun completeTask(task: Task) {
-        // guard: jeśli już DONE – nic nie rób
         if (task.status == TaskStatus.DONE) return
 
         viewModelScope.launch {
-            // oznacz istniejące zadanie jako DONE
             val done = task.copy(status = TaskStatus.DONE)
             repo.update(done)
 
-            // usuń powiązane schedulery/geofence dla tego (wykonanego) zadania
             context?.let { ctx ->
                 ReminderScheduler.cancelReminder(ctx, done.id)
-                GeofenceManager.removeGeofenceForTask(ctx, done.id)
+                GeofenceManager.removeGeofencesForTask(ctx, done.id)
             }
 
-            // jeśli jest reguła powtarzalności, utwórz kolejne wystąpienie
             val rule = task.recurringRule
             if (!rule.isNullOrBlank()) {
-                // wybierz bazę do obliczeń:
-                // preferuj dueAt, jeśli brak -> reminderTimeMillis, jeśli brak -> createdAt
                 val baseMillis = task.dueAt ?: task.reminderTimeMillis ?: task.createdAt
                 val nextBase = computeNextMillis(baseMillis, rule)
                 if (nextBase != null) {
-                    // oblicz przesunięcie przypomnienia względem wybranej bazy (jeśli istniało)
                     val reminderOffset: Long? = task.reminderTimeMillis?.let { it - baseMillis }
-
                     val nextReminder = if (reminderOffset != null) nextBase + reminderOffset else null
 
                     val newTask = task.copy(
                         id = 0L,
                         status = TaskStatus.PENDING,
                         createdAt = System.currentTimeMillis(),
-                        // ustawiamy dueAt zawsze na nextBase (tak, nawet jeśli oryginał nie miał dueAt),
-                        // żeby nowe wystąpienie miało termin i było widoczne w UI.
                         dueAt = nextBase,
                         reminderTimeMillis = nextReminder,
-                        // zachowujemy recurringRule aby kolejne też się powtarzały
-                        recurringRule = task.recurringRule
+                        // zachowujemy lokalizacje, żeby nowe wystąpienie miało te same geofence'y
+                        locations = task.locations
                     )
 
-                    // użyj istniejącej create(...) żeby poprawnie dodać przypomnienia i geofence
-                    create(newTask) { /* id asynchronicznie */ }
+                    create(newTask) { /* id async */ }
                 }
             }
         }
     }
 
-    // Przywróć zadanie do stanu oczekującego
     fun reopenTask(task: Task) {
         if (task.status == TaskStatus.PENDING) return
         viewModelScope.launch {
@@ -263,7 +223,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
-    // cycle priority: LOW -> MEDIUM -> HIGH -> LOW
     fun cyclePriority(task: Task) {
         val next = when (task.priority) {
             Priority.LOW -> Priority.MEDIUM
@@ -273,7 +232,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         update(task.copy(priority = next))
     }
 
-    // set explicit priority
     fun setPriority(task: Task, p: Priority) {
         update(task.copy(priority = p))
     }
