@@ -71,7 +71,7 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
 
         // sort: use explicit Comparators to avoid lambda/generic inference issues
-        result = when (sortOpt) {
+        val sorted = when (sortOpt) {
             SortOption.PRIORITY -> {
                 result.sortedWith(Comparator { a, b ->
                     // priority descending
@@ -98,7 +98,10 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             }
         }
 
-        result
+        // Ensure done tasks are shown at the bottom:
+        // partition into not-done and done, then concatenate so not-done appear first.
+        val (notDone, done) = sorted.partition { it.status != TaskStatus.DONE }
+        notDone + done
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // Backwards compat alias
