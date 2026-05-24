@@ -6,7 +6,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
@@ -137,32 +139,44 @@ fun SettingsScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Dostępne kategorie:", fontWeight = FontWeight.Medium)
-                        FlowRowCategories(categories = categories, defaultList = defaultCategories, onDelete = { cat ->
-                            scope.launch { repo.removeCategory(cat) }
-                        })
-                        Spacer(modifier = Modifier.height(8.dp))
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text("Dostępne kategorie", style = MaterialTheme.typography.titleMedium)
+
+                        FlowRowCategories(
+                            categories = categories.ifEmpty { defaultCategories }, // Zabezpieczenie przed pustą listą
+                            defaultList = defaultCategories,
+                            onDelete = { cat -> scope.launch { repo.removeCategory(cat) } }
+                        )
+
                         OutlinedTextField(
                             value = newCategoryText,
                             onValueChange = { newCategoryText = it },
-                            label = { Text("Dodaj kategorię") },
+                            label = { Text("Nowa kategoria") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                            TextButton(onClick = {
-                                val txt = newCategoryText.trim()
-                                if (txt.isNotEmpty()) {
-                                    scope.launch {
-                                        repo.addCategory(txt)
-                                        newCategoryText = ""
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = {
+                                        val txt = newCategoryText.trim()
+                                        if (txt.isNotEmpty() && !categories.contains(txt)) {
+                                            scope.launch {
+                                                repo.addCategory(txt)
+                                                newCategoryText = ""
+                                            }
+                                        }
                                     }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Dodaj kategorię",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
-                            }) {
-                                Text("Dodaj")
                             }
-                        }
+                        )
                     }
                 }
             }
@@ -200,26 +214,38 @@ fun SettingsItem(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FlowRowCategories(categories: List<String>, defaultList: List<String>, onDelete: (String) -> Unit) {
-    // prosta implementacja wierszy chipów (bez zewnętrznych zależności)
-    Column {
-        // Rozbijamy na wiersze by chociaż trochę ładniej wyglądało; tu proste podejście: jeden wiersz na wszystkie
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            categories.forEach { cat ->
-                Spacer(modifier = Modifier.width(4.dp))
-                AssistChip(
-                    onClick = { /* nic */ },
-                    label = { Text(cat) },
-                    trailingIcon = {
-                        if (cat !in defaultList) {
-                            IconButton(onClick = { onDelete(cat) }) {
-                                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Usuń")
-                            }
+private fun FlowRowCategories(
+    categories: List<String>,
+    defaultList: List<String>,
+    onDelete: (String) -> Unit
+) {
+    // Używamy FlowRow z biblioteki layout, aby automatycznie zawijać elementy do nowej linii
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        categories.forEach { cat ->
+            val isDefault = cat in defaultList
+
+            AssistChip(
+                onClick = { /* Można dodać akcję po kliknięciu na kategorię */ },
+                label = { Text(cat) },
+                trailingIcon = if (!isDefault) {
+                    {
+                        IconButton(
+                            onClick = { onDelete(cat) },
+                            modifier = Modifier.size(18.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Usuń",
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
-                    },
-                    modifier = Modifier.padding(4.dp)
-                )
-            }
+                    }
+                } else null
+            )
         }
     }
 }
