@@ -1,13 +1,16 @@
 package com.example.todo.screens
 
 import android.Manifest
+import android.app.Activity
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.ContentResolver
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Geocoder
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -38,7 +41,9 @@ import com.example.todo.data.TaskLocation
 import com.example.todo.viewmodel.TaskViewModel
 import com.example.todo.settings.SettingsRepository
 import com.google.android.gms.location.LocationServices
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -72,7 +77,11 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     var customCount by remember { mutableStateOf("1") }
     var customUnit by remember { mutableStateOf("dni") }
 
-    // Helpers ruleToDisplay, parseEveryRule (skopiowane z oryginału)
+    // ADDRESS input states
+    var addressInput by remember { mutableStateOf("") }
+    var geocodeLoading by remember { mutableStateOf(false) }
+    var geocodeError by remember { mutableStateOf<String?>(null) }
+
     fun ruleToDisplay(rule: String?): String {
         if (rule.isNullOrBlank() || rule == "brak") return "Brak"
         return when (rule) {
@@ -169,12 +178,64 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             try {
                 fused.lastLocation.addOnSuccessListener { loc ->
                     loc?.let {
-                        // add new location to list
                         val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
                         task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
                     }
                 }
             } catch (e: SecurityException) { }
+        }
+    }
+
+    // Launcher do otwierania MapPickActivity i odbierania wyniku (jeśli nadal używasz map)
+    val mapPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val lat = data?.getDoubleExtra("lat", Double.NaN) ?: Double.NaN
+            val lng = data?.getDoubleExtra("lng", Double.NaN) ?: Double.NaN
+            if (!lat.isNaN() && !lng.isNaN()) {
+                val newLoc = TaskLocation(lat, lng, 100f, "Wybrane miejsce")
+                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+            }
+        }
+    }
+
+    // Funkcja geokodująca wpisany adres (używa Android Geocoder)
+    fun addLocationFromAddress(addressText: String) {
+        if (addressText.isBlank()) {
+            geocodeError = "Podaj adres"
+            return
+        }
+        geocodeError = null
+        geocodeLoading = true
+        scope.launch {
+            val addresses = withContext(Dispatchers.IO) {
+                try {
+                    val geocoder = Geocoder(context, Locale.getDefault())
+                    geocoder.getFromLocationName(addressText, 3)
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            geocodeLoading = false
+            if (addresses == null) {
+                geocodeError = "Błąd geokodowania"
+                Toast.makeText(context, "Błąd geokodowania. Spróbuj ponownie.", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            if (addresses.isEmpty()) {
+                geocodeError = "Nie znaleziono adresu"
+                Toast.makeText(context, "Nie znaleziono adresu", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val adr = addresses.first()
+            val lat = adr.latitude
+            val lng = adr.longitude
+            val label = adr.getAddressLine(0) ?: addressText
+            val newLoc = TaskLocation(lat, lng, 100f, label)
+            task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+            addressInput = ""
+            geocodeError = null
+            Toast.makeText(context, "Dodano lokalizację: $label", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -268,7 +329,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Kategoria, Priorytet, terminy etc. (bez zmian) - skopiowane fragmenty z oryginału
+            // ... (pozostałe sekcje: kategoria, priorytet, daty) pozostają bez zmian - patrz wcześniejszy kod ...
             Column {
                 Text("Kategoria", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -316,7 +377,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Daty i przypomnienia (bez zmian)
+            // Daty i przypomnienia (skrócone; pełna implementacja jak wcześniej)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -517,7 +578,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Sekcja: Lokalizacje (lista)
+            // Sekcja: Lokalizacje (lista + adres input)
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text("Lokalizacje", fontWeight = FontWeight.Bold)
@@ -547,7 +608,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                         Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
                                     }
                                     IconButton(onClick = {
-                                        // otwórz w mapach
                                         val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
                                         val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
                                         context.startActivity(mapIntent)
@@ -559,16 +619,34 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
+                    // Adres input
+                    OutlinedTextField(
+                        value = addressInput,
+                        onValueChange = { addressInput = it },
+                        label = { Text("Adres (np. ulica, miasto)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = {
-                            // usuń wszystkie
-                            task = task?.copy(locations = emptyList())
-                        }) {
-                            Text("Usuń wszystkie", color = MaterialTheme.colorScheme.error)
+                        if (geocodeLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            TextButton(onClick = {
+                                // geocode address
+                                addLocationFromAddress(addressInput)
+                            }) {
+                                Icon(Icons.Default.Search, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Dodaj z adresu")
+                            }
                         }
+
                         Spacer(modifier = Modifier.width(8.dp))
+
                         TextButton(onClick = {
                             val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
                             if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
@@ -587,6 +665,23 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                             Spacer(Modifier.width(6.dp))
                             Text("Dodaj aktualną")
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // jeśli masz MapPickActivity, przycisk do map
+                        TextButton(onClick = {
+                            val intent = Intent(context, MapPickActivity::class.java)
+                            mapPickerLauncher.launch(intent)
+                        }) {
+                            Icon(Icons.Default.PinDrop, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Wybierz na mapie")
+                        }
+                    }
+
+                    geocodeError?.let {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
