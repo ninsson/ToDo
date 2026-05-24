@@ -117,6 +117,18 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                         colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     )
                     PriorityIndicatorSimple(priority = task.priority)
+
+                    // Kategoria: pokaż jako chip jeśli istnieje
+                    if (!task.category.isNullOrBlank()) {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(task.category!!) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Label, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        )
+                    }
                 }
             }
 
@@ -281,6 +293,15 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        // pokaż kategorię też w metadanych (opcjonalnie)
+                        if (!task.category.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "Kategoria: ${task.category}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
