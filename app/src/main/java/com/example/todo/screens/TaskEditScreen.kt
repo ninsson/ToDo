@@ -50,7 +50,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
-    var recurrence by remember { mutableStateOf("brak") } // przechowuje wartość, która trafi do recurringRule (np. "codziennie" lub "every:3:days")
+
+    // recurrence: surowa reguła (np. "every:3:days", "codziennie" lub "brak")
+    var recurrence by remember { mutableStateOf("brak") }
+    // label do wyświetlenia (czytelny, po polsku)
+    var recurrenceLabel by remember { mutableStateOf("Brak") }
+
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
     var dueMillis by remember { mutableStateOf<Long?>(null) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
@@ -58,7 +63,64 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     // dialog - niestandardowa reguła
     var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
     var customCount by remember { mutableStateOf("1") }
-    var customUnit by remember { mutableStateOf("dni") } // wyświetlany tekst, mapujemy do days/weeks/months
+    var customUnit by remember { mutableStateOf("dni") } // "dni" | "tygodnie" | "miesiące"
+
+    fun ruleToDisplay(rule: String?): String {
+        if (rule.isNullOrBlank() || rule == "brak") return "Brak"
+        return when (rule) {
+            "codziennie" -> "Codziennie"
+            "co tydzień" -> "Co tydzień"
+            "co miesiąc" -> "Co miesiąc"
+            else -> {
+                if (rule.startsWith("every:")) {
+                    val parts = rule.split(":")
+                    if (parts.size >= 3) {
+                        val n = parts[1].toIntOrNull() ?: return rule
+                        val unitKey = parts[2]
+                        val unitPol = when (unitKey) {
+                            "days" -> if (n == 1) "dzień" else "dni"
+                            "weeks" -> if (n == 1) "tydzień" else "tygodnie"
+                            "months" -> if (n == 1) "miesiąc" else "miesiące"
+                            else -> unitKey
+                        }
+                        // specjalne skróty dla 1
+                        return if (n == 1) {
+                            when (unitKey) {
+                                "days" -> "Codziennie"
+                                "weeks" -> "Co tydzień"
+                                "months" -> "Co miesiąc"
+                                else -> "Co $n $unitPol"
+                            }
+                        } else {
+                            "Co $n $unitPol"
+                        }
+                    } else {
+                        rule
+                    }
+                } else {
+                    // nieznany format -> zwracamy surową wartość
+                    rule
+                }
+            }
+        }
+    }
+
+    // Parsuje rule "every:n:unit" i zwraca parę (count, unitPol) lub null jeśli nie parsowalny
+    fun parseEveryRule(rule: String?): Pair<String, String>? {
+        if (rule == null) return null
+        if (!rule.startsWith("every:")) return null
+        val parts = rule.split(":")
+        if (parts.size < 3) return null
+        val n = parts[1]
+        val unitKey = parts[2]
+        val unitPol = when (unitKey) {
+            "days" -> "dni"
+            "weeks" -> "tygodnie"
+            "months" -> "miesiące"
+            else -> "dni"
+        }
+        return Pair(n, unitPol)
+    }
 
     LaunchedEffect(taskId) {
         if (taskId != null) {
@@ -67,12 +129,21 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 title = t?.title ?: ""
                 desc = t?.description ?: ""
                 recurrence = t?.recurringRule ?: "brak"
+                recurrenceLabel = ruleToDisplay(recurrence)
                 reminderMillis = t?.reminderTimeMillis
                 dueMillis = t?.dueAt
                 priority = t?.priority ?: Priority.MEDIUM
+
+                // jeśli mamy niestandardową regułę, spróbuj wypełnić dialog
+                parseEveryRule(recurrence)?.let { (count, unitPol) ->
+                    customCount = count
+                    customUnit = unitPol
+                }
             }
         } else {
             task = Task(title = "", description = "")
+            recurrence = "brak"
+            recurrenceLabel = ruleToDisplay(recurrence)
         }
     }
 
@@ -255,7 +326,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         onExpandedChange = { recurrenceMenuExpanded = !recurrenceMenuExpanded }
                     ) {
                         OutlinedTextField(
-                            value = recurrence,
+                            value = recurrenceLabel,
                             onValueChange = { },
                             readOnly = true,
                             label = { Text("Powtarzalność") },
@@ -273,12 +344,19 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     onClick = {
                                         recurrenceMenuExpanded = false
                                         if (opt == "własny") {
-                                            // otwórz dialog do podania niestandardowej reguły
+                                            // przygotuj dialog: jeśli aktualna reguła to every:... to prefille
+                                            parseEveryRule(recurrence)?.let { (count, unitPol) ->
+                                                customCount = count
+                                                customUnit = unitPol
+                                            }
                                             showCustomRecurrenceDialog = true
                                         } else {
                                             // normalny wybór
                                             recurrence = if (opt == "brak") "brak" else opt
+                                            recurrenceLabel = ruleToDisplay(recurrence)
                                             task = task?.copy(recurringRule = if (recurrence == "brak") null else recurrence)
+                                            // jeśli nie ma dueMillis ustaw teraz, żeby było widoczne (UI) - opcjonalne
+                                            if (dueMillis == null && recurrence != "brak") dueMillis = System.currentTimeMillis()
                                         }
                                     }
                                 )
@@ -306,6 +384,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     }
                                     val rule = "every:$n:$unitKey"
                                     recurrence = rule
+                                    recurrenceLabel = ruleToDisplay(rule)
                                     // ustaw task.recurringRule
                                     task = task?.copy(recurringRule = rule)
                                     // jeśli nie ma dueMillis ustaw teraz, żeby od razu było widoczne w UI
