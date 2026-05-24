@@ -50,10 +50,15 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
-    var recurrence by remember { mutableStateOf("brak") }
+    var recurrence by remember { mutableStateOf("brak") } // przechowuje wartość, która trafi do recurringRule (np. "codziennie" lub "every:3:days")
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
     var dueMillis by remember { mutableStateOf<Long?>(null) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
+
+    // dialog - niestandardowa reguła
+    var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
+    var customCount by remember { mutableStateOf("1") }
+    var customUnit by remember { mutableStateOf("dni") } // wyświetlany tekst, mapujemy do days/weeks/months
 
     LaunchedEffect(taskId) {
         if (taskId != null) {
@@ -200,7 +205,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Sekcja: Daty i czas (Wizualnie ulepszona używając elementu Card)
+            // Sekcja: Daty i czas
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -243,7 +248,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
                     // Cykliczność
                     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
-                    val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc")
+                    val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc", "własny")
 
                     ExposedDropdownMenuBox(
                         expanded = recurrenceMenuExpanded,
@@ -266,19 +271,102 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                 DropdownMenuItem(
                                     text = { Text(opt) },
                                     onClick = {
-                                        recurrence = opt
-                                        // Zmiana taska tutaj nie zresetuje już tytułu!
-                                        task = task?.copy(recurringRule = if (opt == "brak") null else opt)
                                         recurrenceMenuExpanded = false
+                                        if (opt == "własny") {
+                                            // otwórz dialog do podania niestandardowej reguły
+                                            showCustomRecurrenceDialog = true
+                                        } else {
+                                            // normalny wybór
+                                            recurrence = if (opt == "brak") "brak" else opt
+                                            task = task?.copy(recurringRule = if (recurrence == "brak") null else recurrence)
+                                        }
                                     }
                                 )
                             }
                         }
                     }
+
+                    // Dialog: niestandardowa reguła
+                    if (showCustomRecurrenceDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showCustomRecurrenceDialog = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val n = customCount.toLongOrNull() ?: 0L
+                                    if (n <= 0L) {
+                                        // ignoruj / nie zatwierdzaj jeśli niepoprawne
+                                        return@TextButton
+                                    }
+                                    // przetłumacz jednostkę na klucz używany przez computeNextMillis
+                                    val unitKey = when (customUnit) {
+                                        "dni" -> "days"
+                                        "tygodnie" -> "weeks"
+                                        "miesiące" -> "months"
+                                        else -> "days"
+                                    }
+                                    val rule = "every:$n:$unitKey"
+                                    recurrence = rule
+                                    // ustaw task.recurringRule
+                                    task = task?.copy(recurringRule = rule)
+                                    // jeśli nie ma dueMillis ustaw teraz, żeby od razu było widoczne w UI
+                                    if (dueMillis == null) dueMillis = System.currentTimeMillis()
+                                    showCustomRecurrenceDialog = false
+                                }) {
+                                    Text("OK")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showCustomRecurrenceDialog = false }) {
+                                    Text("Anuluj")
+                                }
+                            },
+                            title = { Text("Niestandardowa powtarzalność") },
+                            text = {
+                                Column {
+                                    Text("Podaj interwał powtarzania:")
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        OutlinedTextField(
+                                            value = customCount,
+                                            onValueChange = { v ->
+                                                // dopuść tylko cyfry
+                                                customCount = v.filter { it.isDigit() }
+                                            },
+                                            label = { Text("Co ile") },
+                                            singleLine = true,
+                                            modifier = Modifier.width(120.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        // jednostka - prosty dropdown
+                                        var unitMenuExpanded by remember { mutableStateOf(false) }
+                                        Box {
+                                            OutlinedTextField(
+                                                value = customUnit,
+                                                onValueChange = {},
+                                                readOnly = true,
+                                                label = { Text("Jednostka") },
+                                                trailingIcon = {
+                                                    IconButton(onClick = { unitMenuExpanded = true }) {
+                                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                                    }
+                                                },
+                                                modifier = Modifier.width(160.dp)
+                                            )
+                                            DropdownMenu(expanded = unitMenuExpanded, onDismissRequest = { unitMenuExpanded = false }) {
+                                                listOf("dni", "tygodnie", "miesiące").forEach { u ->
+                                                    DropdownMenuItem(text = { Text(u) }, onClick = { customUnit = u; unitMenuExpanded = false })
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        )
+                    }
                 }
             }
 
-            // Sekcja: Załączniki (Zastąpiono LazyColumn pętlą dla uniknięcia błędów scrollowania)
+            // Sekcja: Załączniki
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
