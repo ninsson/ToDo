@@ -104,14 +104,25 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
     // Backwards compat alias
     val tasks: StateFlow<List<Task>> = visibleTasks
 
+    /**
+     * Wstawienie zadania do bazy.
+     * Jeśli zadanie jest powtarzalne i nie ma dueAt, ustawiamy dueAt = createdAt (żeby było widoczne w UI).
+     */
     fun create(task: Task, onDone: (Long) -> Unit = {}) {
         viewModelScope.launch {
-            val id = repo.insert(task)
+            val taskToInsert = if (!task.recurringRule.isNullOrBlank() && task.dueAt == null) {
+                // traktujemy createdAt jako początek serii i ustawiamy dueAt, żeby wyświetlało się w liście/przypomnieniu
+                task.copy(dueAt = task.createdAt)
+            } else {
+                task
+            }
+
+            val id = repo.insert(taskToInsert)
             context?.let { ctx ->
-                if (task.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, task.copy(id = id))
-                if (task.locationLat != null && task.locationLng != null) GeofenceManager.addGeofenceForTask(ctx, id,
-                    task.locationLat!!,
-                    task.locationLng!!
+                if (taskToInsert.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, taskToInsert.copy(id = id))
+                if (taskToInsert.locationLat != null && taskToInsert.locationLng != null) GeofenceManager.addGeofenceForTask(ctx, id,
+                    taskToInsert.locationLat!!,
+                    taskToInsert.locationLng!!
                 )
             }
             onDone(id)
@@ -187,7 +198,12 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
-    // Oznacz zadanie jako wykonane. Jeśli ma regułę powtarzalności — utwórz kolejne wystąpienie.
+    /**
+     * Oznacz zadanie jako wykonane. Jeśli ma regułę powtarzalności — utwórz kolejne wystąpienie.
+     *
+     * Zmiana: gdy brak dueAt, traktujemy createdAt jako początek serii (base) i dla nowego wystąpienia
+     * zawsze ustawiamy dueAt = nextBase (żeby nowe wystąpienie miało termin i było widoczne).
+     */
     fun completeTask(task: Task) {
         // guard: jeśli już DONE – nic nie rób
         if (task.status == TaskStatus.DONE) return
@@ -206,19 +222,13 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             // jeśli jest reguła powtarzalności, utwórz kolejne wystąpienie
             val rule = task.recurringRule
             if (!rule.isNullOrBlank()) {
-                // wybierz bazę do obliczeń: preferuj dueAt, jeśli brak -> reminderTimeMillis
-                val baseMillis = task.dueAt ?: task.reminderTimeMillis
+                // wybierz bazę do obliczeń:
+                // preferuj dueAt, jeśli brak -> reminderTimeMillis, jeśli brak -> createdAt
+                val baseMillis = task.dueAt ?: task.reminderTimeMillis ?: task.createdAt
                 val nextBase = computeNextMillis(baseMillis, rule)
                 if (nextBase != null) {
-                    // oblicz przesunięcie przypomnienia względem dueAt (jeśli istniało)
-                    val reminderOffset: Long? = if (task.dueAt != null && task.reminderTimeMillis != null) {
-                        task.reminderTimeMillis!! - task.dueAt!!
-                    } else if (task.dueAt == null && task.reminderTimeMillis != null && baseMillis != null) {
-                        // jeżeli bazą był reminder (nie dueAt), to offset utrzymujemy jako 0 (czyli przypomnienie = nextBase)
-                        task.reminderTimeMillis!! - baseMillis
-                    } else {
-                        null
-                    }
+                    // oblicz przesunięcie przypomnienia względem wybranej bazy (jeśli istniało)
+                    val reminderOffset: Long? = task.reminderTimeMillis?.let { it - baseMillis }
 
                     val nextReminder = if (reminderOffset != null) nextBase + reminderOffset else null
 
@@ -226,7 +236,9 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                         id = 0L,
                         status = TaskStatus.PENDING,
                         createdAt = System.currentTimeMillis(),
-                        dueAt = if (task.dueAt != null) nextBase else null,
+                        // ustawiamy dueAt zawsze na nextBase (tak, nawet jeśli oryginał nie miał dueAt),
+                        // żeby nowe wystąpienie miało termin i było widoczne w UI.
+                        dueAt = nextBase,
                         reminderTimeMillis = nextReminder,
                         // zachowujemy recurringRule aby kolejne też się powtarzały
                         recurringRule = task.recurringRule
