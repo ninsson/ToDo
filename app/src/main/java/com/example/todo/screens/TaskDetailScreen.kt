@@ -194,56 +194,81 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // Sekcja: Lokalizacje (obsługa listy)
+            // --- ZAKTUALIZOWANA SEKCJA: LOKALIZACJE ---
             if (task.locations.isNotEmpty()) {
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Lokalizacje", fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Lokalizacje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         }
 
-                        task.locations.forEachIndexed { idx, loc ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(loc.label ?: "Lokalizacja ${idx + 1}", fontWeight = FontWeight.Medium)
-                                    Text("%.5f, %.5f · %dm".format(loc.lat, loc.lng, loc.radiusMeters.toInt()), style = MaterialTheme.typography.bodySmall)
-                                }
-                                TextButton(onClick = {
-                                    // otwórz trasę (nawigacja)
-                                    val uri = Uri.parse("google.navigation:q=${loc.lat},${loc.lng}")
-                                    val i = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
-                                    context.startActivity(i)
-                                }) {
-                                    Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Prowadź")
-                                }
-                                Spacer(Modifier.width(8.dp))
-                                Button(
-                                    onClick = {
-                                        val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(task.title)})")
-                                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                        context.startActivity(mapIntent)
-                                    }
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            task.locations.forEachIndexed { idx, loc ->
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .padding(12.dp)
                                 ) {
-                                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Otwórz w Mapach")
+                                    // Nagłówek lokacji
+                                    Text(
+                                        text = loc.label ?: "Lokalizacja ${idx + 1}",
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Współrzędne: %.5f, %.5f".format(loc.lat, loc.lng),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Akcje przypięte do prawej strony
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(
+                                            onClick = {
+                                                val uri = Uri.parse("google.navigation:q=${loc.lat},${loc.lng}")
+                                                val i = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
+                                                context.startActivity(i)
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Nawiguj")
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        FilledTonalButton(
+                                            onClick = {
+                                                val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(task.title)})")
+                                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                                context.startActivity(mapIntent)
+                                            },
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Mapa")
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            // --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
 
             if (task.attachments.isNotEmpty()) {
                 Text("Załączniki (${task.attachments.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
