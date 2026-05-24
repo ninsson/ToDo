@@ -29,6 +29,10 @@ fun SettingsScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
 
     val notificationsEnabled by repo.notificationsEnabled.collectAsState(initial = true)
+    val categories by repo.categories.collectAsState(initial = emptyList())
+
+    var newCategoryText by remember { mutableStateOf("") }
+    val defaultCategories = listOf("Praca", "Osobiste", "Zakupy", "Zdrowie", "Inne")
 
     Scaffold(
         topBar = {
@@ -84,7 +88,6 @@ fun SettingsScreen(navController: NavController) {
                                 }
                             )
                         },
-                        // Aby wiersz z Switchem też reagował na kliknięcie w dowolnym miejscu:
                         modifier = Modifier.clickable {
                             scope.launch { repo.setNotificationsEnabled(!notificationsEnabled) }
                         }
@@ -121,6 +124,48 @@ fun SettingsScreen(navController: NavController) {
                     )
                 }
             }
+
+            // Sekcja: Kategorie
+            Column {
+                Text(
+                    text = "Kategorie",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+                )
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Dostępne kategorie:", fontWeight = FontWeight.Medium)
+                        FlowRowCategories(categories = categories, defaultList = defaultCategories, onDelete = { cat ->
+                            scope.launch { repo.removeCategory(cat) }
+                        })
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = newCategoryText,
+                            onValueChange = { newCategoryText = it },
+                            label = { Text("Dodaj kategorię") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = {
+                                val txt = newCategoryText.trim()
+                                if (txt.isNotEmpty()) {
+                                    scope.launch {
+                                        repo.addCategory(txt)
+                                        newCategoryText = ""
+                                    }
+                                }
+                            }) {
+                                Text("Dodaj")
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -151,4 +196,30 @@ fun SettingsItem(
         },
         modifier = Modifier.clickable { onClick() }
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FlowRowCategories(categories: List<String>, defaultList: List<String>, onDelete: (String) -> Unit) {
+    // prosta implementacja wierszy chipów (bez zewnętrznych zależności)
+    Column {
+        // Rozbijamy na wiersze by chociaż trochę ładniej wyglądało; tu proste podejście: jeden wiersz na wszystkie
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+            categories.forEach { cat ->
+                Spacer(modifier = Modifier.width(4.dp))
+                AssistChip(
+                    onClick = { /* nic */ },
+                    label = { Text(cat) },
+                    trailingIcon = {
+                        if (cat !in defaultList) {
+                            IconButton(onClick = { onDelete(cat) }) {
+                                Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Usuń")
+                            }
+                        }
+                    },
+                    modifier = Modifier.padding(4.dp)
+                )
+            }
+        }
+    }
 }

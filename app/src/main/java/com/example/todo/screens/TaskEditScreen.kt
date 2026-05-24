@@ -35,6 +35,7 @@ import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
 import com.example.todo.data.Task
 import com.example.todo.viewmodel.TaskViewModel
+import com.example.todo.settings.SettingsRepository
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -46,24 +47,29 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    val settingsRepo = remember { SettingsRepository(context) }
+    val categories by settingsRepo.categories.collectAsState(initial = listOf("Praca", "Osobiste", "Zakupy", "Zdrowie", "Inne"))
+
     var task by remember { mutableStateOf<Task?>(null) }
 
     var title by remember { mutableStateOf("") }
     var desc by remember { mutableStateOf("") }
 
-    // recurrence: surowa reguła (np. "every:3:days", "codziennie" lub "brak")
-    var recurrence by remember { mutableStateOf("brak") }
-    // label do wyświetlenia (czytelny, po polsku)
+    var recurrence by remember { mutableStateOf("brak") } // surowa reguła
     var recurrenceLabel by remember { mutableStateOf("Brak") }
 
     var reminderMillis by remember { mutableStateOf<Long?>(null) }
     var dueMillis by remember { mutableStateOf<Long?>(null) }
     var priority by remember { mutableStateOf(Priority.MEDIUM) }
 
+    // category state
+    var category by remember { mutableStateOf<String?>(null) }
+    var categoryMenuExpanded by remember { mutableStateOf(false) }
+
     // dialog - niestandardowa reguła
     var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
     var customCount by remember { mutableStateOf("1") }
-    var customUnit by remember { mutableStateOf("dni") } // "dni" | "tygodnie" | "miesiące"
+    var customUnit by remember { mutableStateOf("dni") } // wyświetlany tekst, mapujemy do days/weeks/months
 
     fun ruleToDisplay(rule: String?): String {
         if (rule.isNullOrBlank() || rule == "brak") return "Brak"
@@ -83,7 +89,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                             "months" -> if (n == 1) "miesiąc" else "miesiące"
                             else -> unitKey
                         }
-                        // specjalne skróty dla 1
                         return if (n == 1) {
                             when (unitKey) {
                                 "days" -> "Codziennie"
@@ -98,14 +103,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         rule
                     }
                 } else {
-                    // nieznany format -> zwracamy surową wartość
                     rule
                 }
             }
         }
     }
 
-    // Parsuje rule "every:n:unit" i zwraca parę (count, unitPol) lub null jeśli nie parsowalny
     fun parseEveryRule(rule: String?): Pair<String, String>? {
         if (rule == null) return null
         if (!rule.startsWith("every:")) return null
@@ -133,8 +136,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 reminderMillis = t?.reminderTimeMillis
                 dueMillis = t?.dueAt
                 priority = t?.priority ?: Priority.MEDIUM
-
-                // jeśli mamy niestandardową regułę, spróbuj wypełnić dialog
+                category = t?.category
+                // prefilling custom dialog if needed
                 parseEveryRule(recurrence)?.let { (count, unitPol) ->
                     customCount = count
                     customUnit = unitPol
@@ -210,7 +213,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         recurringRule = if (recurrence == "brak") null else recurrence,
                         reminderTimeMillis = reminderMillis,
                         dueAt = dueMillis,
-                        priority = priority
+                        priority = priority,
+                        category = category
                     ) ?: return@FloatingActionButton
 
                     scope.launch {
@@ -259,6 +263,38 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 minLines = 3,
                 shape = RoundedCornerShape(12.dp)
             )
+
+            // Sekcja: Kategoria (nowość)
+            Column {
+                Text("Kategoria", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(8.dp))
+                ExposedDropdownMenuBox(
+                    expanded = categoryMenuExpanded,
+                    onExpandedChange = { categoryMenuExpanded = !categoryMenuExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = category ?: "Brak",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Kategoria") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryMenuExpanded) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryMenuExpanded,
+                        onDismissRequest = { categoryMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(text = { Text("Brak") }, onClick = { category = null; categoryMenuExpanded = false })
+                        categories.forEach { cat ->
+                            DropdownMenuItem(text = { Text(cat) }, onClick = {
+                                category = cat
+                                categoryMenuExpanded = false
+                            })
+                        }
+                    }
+                }
+            }
 
             // Sekcja: Priorytet
             Column {
@@ -344,18 +380,15 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     onClick = {
                                         recurrenceMenuExpanded = false
                                         if (opt == "własny") {
-                                            // przygotuj dialog: jeśli aktualna reguła to every:... to prefille
                                             parseEveryRule(recurrence)?.let { (count, unitPol) ->
                                                 customCount = count
                                                 customUnit = unitPol
                                             }
                                             showCustomRecurrenceDialog = true
                                         } else {
-                                            // normalny wybór
                                             recurrence = if (opt == "brak") "brak" else opt
                                             recurrenceLabel = ruleToDisplay(recurrence)
                                             task = task?.copy(recurringRule = if (recurrence == "brak") null else recurrence)
-                                            // jeśli nie ma dueMillis ustaw teraz, żeby było widoczne (UI) - opcjonalne
                                             if (dueMillis == null && recurrence != "brak") dueMillis = System.currentTimeMillis()
                                         }
                                     }
@@ -372,10 +405,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                 TextButton(onClick = {
                                     val n = customCount.toLongOrNull() ?: 0L
                                     if (n <= 0L) {
-                                        // ignoruj / nie zatwierdzaj jeśli niepoprawne
                                         return@TextButton
                                     }
-                                    // przetłumacz jednostkę na klucz używany przez computeNextMillis
                                     val unitKey = when (customUnit) {
                                         "dni" -> "days"
                                         "tygodnie" -> "weeks"
@@ -385,9 +416,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     val rule = "every:$n:$unitKey"
                                     recurrence = rule
                                     recurrenceLabel = ruleToDisplay(rule)
-                                    // ustaw task.recurringRule
                                     task = task?.copy(recurringRule = rule)
-                                    // jeśli nie ma dueMillis ustaw teraz, żeby od razu było widoczne w UI
                                     if (dueMillis == null) dueMillis = System.currentTimeMillis()
                                     showCustomRecurrenceDialog = false
                                 }) {
@@ -407,16 +436,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         OutlinedTextField(
                                             value = customCount,
-                                            onValueChange = { v ->
-                                                // dopuść tylko cyfry
-                                                customCount = v.filter { it.isDigit() }
-                                            },
+                                            onValueChange = { v -> customCount = v.filter { it.isDigit() } },
                                             label = { Text("Co ile") },
                                             singleLine = true,
                                             modifier = Modifier.width(120.dp)
                                         )
                                         Spacer(modifier = Modifier.width(12.dp))
-                                        // jednostka - prosty dropdown
                                         var unitMenuExpanded by remember { mutableStateOf(false) }
                                         Box {
                                             OutlinedTextField(

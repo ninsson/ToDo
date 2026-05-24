@@ -1,10 +1,11 @@
 package com.example.todo.settings
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import kotlinx.coroutines.flow.map
 
 private const val NAME = "todo_settings"
@@ -12,15 +13,53 @@ private val Context.dataStore by preferencesDataStore(NAME)
 
 object SettingsKeys {
     val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+    val CATEGORIES = stringSetPreferencesKey("categories")
 }
 
+/**
+ * Domyślne kategorie (po polsku).
+ * Zwracamy je zawsze jako podstawę listy; dodatkowe kategorie użytkownika będą dopisywane po nich.
+ */
+private val DEFAULT_CATEGORIES = listOf("Praca", "Osobiste", "Zakupy", "Zdrowie", "Inne")
+
 class SettingsRepository(private val context: Context) {
+
     val notificationsEnabled = context.dataStore.data
         .map { prefs -> prefs[SettingsKeys.NOTIFICATIONS_ENABLED] ?: true }
+
+    /**
+     * Zwraca listę kategorii: domyślne + dodatkowe zapisane przez użytkownika.
+     * Kolejność: najpierw domyślne (w stałej kolejności), potem dodatkowe w losowej kolejności (string set).
+     */
+    val categories = context.dataStore.data
+        .map { prefs ->
+            val stored = prefs[SettingsKeys.CATEGORIES] ?: emptySet()
+            // zachowaj kolejność domyślnych, a resztę dopisz na końcu (unikaty)
+            val extras = stored.filter { it !in DEFAULT_CATEGORIES }
+            DEFAULT_CATEGORIES + extras
+        }
 
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[SettingsKeys.NOTIFICATIONS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun addCategory(category: String) {
+        if (category.isBlank()) return
+        context.dataStore.edit { prefs ->
+            val set = prefs[SettingsKeys.CATEGORIES]?.toMutableSet() ?: mutableSetOf()
+            set.add(category.trim())
+            prefs[SettingsKeys.CATEGORIES] = set
+        }
+    }
+
+    suspend fun removeCategory(category: String) {
+        context.dataStore.edit { prefs ->
+            val set = prefs[SettingsKeys.CATEGORIES]?.toMutableSet() ?: mutableSetOf()
+            if (set.remove(category)) {
+                prefs[SettingsKeys.CATEGORIES] = set
+            }
         }
     }
 }
