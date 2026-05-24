@@ -186,7 +186,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         }
     }
 
-    // Launcher do otwierania MapPickActivity i odbierania wyniku (jeśli nadal używasz map)
+    // Launcher do otwierania MapPickActivity i odbierania wyniku
     val mapPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val data = result.data
@@ -199,7 +199,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
         }
     }
 
-    // Funkcja geokodująca wpisany adres (używa Android Geocoder)
+    // Funkcja geokodująca wpisany adres
     fun addLocationFromAddress(addressText: String) {
         if (addressText.isBlank()) {
             geocodeError = "Podaj adres"
@@ -329,7 +329,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // ... (pozostałe sekcje: kategoria, priorytet, daty) pozostają bez zmian - patrz wcześniejszy kod ...
             Column {
                 Text("Kategoria", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.height(8.dp))
@@ -377,7 +376,6 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Daty i przypomnienia (skrócone; pełna implementacja jak wcześniej)
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -417,7 +415,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                         }
                     }
 
-                    // Powtarzalność (skopiowane)
+                    // Powtarzalność
                     var recurrenceMenuExpanded by remember { mutableStateOf(false) }
                     val recurrenceOptions = listOf("brak", "codziennie", "co tydzień", "co miesiąc", "własny")
 
@@ -533,7 +531,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Załączniki (bez zmian)
+            // Załączniki
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -578,113 +576,140 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                 }
             }
 
-            // Sekcja: Lokalizacje (lista + adres input)
+            // --- ZAKTUALIZOWANA SEKCJA: LOKALIZACJE ---
             OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Lokalizacje", fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    // Nagłówek sekcji
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Lokalizacje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    }
 
-                    val locations = task?.locations ?: emptyList()
-                    if (locations.isEmpty()) {
-                        Text("Brak przypisanych lokalizacji", style = MaterialTheme.typography.bodySmall)
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            locations.forEachIndexed { idx, loc ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Pole adresu (z wyszukiwaniem przeniesionym do środka)
+                    OutlinedTextField(
+                        value = addressInput,
+                        onValueChange = { addressInput = it },
+                        label = { Text("Znajdź po adresie...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        leadingIcon = {
+                            Icon(Icons.Default.Search, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (geocodeLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                IconButton(
+                                    onClick = { addLocationFromAddress(addressInput) },
+                                    enabled = addressInput.isNotBlank()
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(loc.label ?: "Miejsce ${idx + 1}", fontWeight = FontWeight.Medium)
-                                        Text("%.5f, %.5f · %dm".format(loc.lat, loc.lng, loc.radiusMeters.toInt()), style = MaterialTheme.typography.bodySmall)
-                                    }
-                                    IconButton(onClick = {
-                                        task = task?.copy(locations = locations.filterIndexed { i, _ -> i != idx })
-                                    }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
-                                    }
-                                    IconButton(onClick = {
-                                        val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
-                                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                        context.startActivity(mapIntent)
-                                    }) {
-                                        Icon(Icons.Default.Map, contentDescription = "Otwórz w Mapach")
-                                    }
+                                    Icon(Icons.Default.Add, contentDescription = "Dodaj z adresu", tint = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         }
+                    )
+
+                    geocodeError?.let {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Adres input
-                    OutlinedTextField(
-                        value = addressInput,
-                        onValueChange = { addressInput = it },
-                        label = { Text("Adres (np. ulica, miasto)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        if (geocodeLoading) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        } else {
-                            TextButton(onClick = {
-                                // geocode address
-                                addLocationFromAddress(addressInput)
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Dodaj z adresu")
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        TextButton(onClick = {
-                            val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-                            if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                                val fused = LocationServices.getFusedLocationProviderClient(context)
-                                fused.lastLocation.addOnSuccessListener { loc ->
-                                    loc?.let {
-                                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
-                                        task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                    // Przyciski szybkich akcji (pół na pół)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = {
+                                val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                                if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+                                    val fused = LocationServices.getFusedLocationProviderClient(context)
+                                    fused.lastLocation.addOnSuccessListener { loc ->
+                                        loc?.let {
+                                            val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                                            task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                        }
                                     }
+                                } else {
+                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
-                            } else {
-                                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                            }
-                        }) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Dodaj aktualną")
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Moja pozycja", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
 
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // jeśli masz MapPickActivity, przycisk do map
-                        TextButton(onClick = {
-                            val intent = Intent(context, MapPickActivity::class.java)
-                            mapPickerLauncher.launch(intent)
-                        }) {
-                            Icon(Icons.Default.PinDrop, contentDescription = null)
-                            Spacer(Modifier.width(6.dp))
-                            Text("Wybierz na mapie")
+                        FilledTonalButton(
+                            onClick = {
+                                val intent = Intent(context, MapPickActivity::class.java)
+                                mapPickerLauncher.launch(intent)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Wybierz", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
 
-                    geocodeError?.let {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Lista dodanych lokalizacji
+                    val locations = task?.locations ?: emptyList()
+                    if (locations.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Brak przypisanych lokalizacji", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            locations.forEachIndexed { idx, loc ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(loc.label ?: "Miejsce ${idx + 1}", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("%.5f, %.5f".format(loc.lat, loc.lng), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+
+                                    Row {
+                                        IconButton(onClick = {
+                                            val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
+                                            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                            context.startActivity(mapIntent)
+                                        }) {
+                                            Icon(Icons.Default.Map, contentDescription = "Otwórz w Mapach", tint = MaterialTheme.colorScheme.primary)
+                                        }
+                                        IconButton(onClick = {
+                                            task = task?.copy(locations = locations.filterIndexed { i, _ -> i != idx })
+                                        }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
+            // --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
 
             Spacer(modifier = Modifier.height(72.dp))
         }
