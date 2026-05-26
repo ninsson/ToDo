@@ -12,8 +12,8 @@ import com.example.todo.screens.TaskDetailScreen
 import com.example.todo.screens.SettingsScreen
 
 @Composable
-fun MainNavHost(navController: NavHostController, viewModel: TaskViewModel) {
-    NavHost(navController = navController, startDestination = "list") {
+fun MainNavHost(navController: NavHostController, viewModel: TaskViewModel, startDestination: String = "list") {
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("list") {
             TaskListScreen(navController = navController, viewModel = viewModel)
         }

@@ -25,4 +25,8 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE title LIKE :query OR description LIKE :query ORDER BY dueAt ASC")
     fun search(query: String): Flow<List<Task>>
+
+    // nowa synchronna metoda licząca ilość zadań o danym statusie (suspend)
+    @Query("SELECT COUNT(*) FROM tasks WHERE status = :status")
+    suspend fun countByStatus(status: TaskStatus): Int
 }
