@@ -5,14 +5,13 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.room.Room
-import com.example.todo.data.AppDatabase
 import com.example.todo.DatabaseProvider
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.example.todo.MainActivity
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -30,23 +29,35 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
 
                 // pobierz task z DB i wyświetl powiadomienie
                 CoroutineScope(Dispatchers.IO).launch {
-                    // używamy singletona DB
                     val db = DatabaseProvider.get(context)
                     val task = db.taskDao().getById(id)
                     task?.let {
                         NotificationHelper.createChannel(context)
 
-                        // jeśli lokalizacje dostępne, przygotuj PendingIntent do nawigacji do konkretnego punktu
+                        // contentIntent -> otwórz szczegóły zadania w aplikacji
+                        val openIntent = Intent(context, MainActivity::class.java).apply {
+                            putExtra("open_task_id", it.id)
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        val openPending = PendingIntent.getActivity(
+                            context,
+                            (it.id % Int.MAX_VALUE).toInt(),
+                            openIntent,
+                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                        )
+
+                        // jeśli lokalizacja dostępna, przygotuj action "Nawiguj" otwierający Google Maps
                         val loc = it.locations.getOrNull(locIdx)
                         val navPending: PendingIntent? = loc?.let { location ->
                             val uri = Uri.parse("google.navigation:q=${location.lat},${location.lng}")
                             val navIntent = Intent(Intent.ACTION_VIEW, uri).apply {
                                 setPackage("com.google.android.apps.maps")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             }
                             PendingIntent.getActivity(
                                 context,
-                                // requestCode: taskId + locIdx to make it unique-ish
-                                (id + locIdx).toInt(),
+                                // requestCode: unikalny-ish
+                                ((it.id + locIdx) % Int.MAX_VALUE).toInt(),
                                 navIntent,
                                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                             )
@@ -57,7 +68,9 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                             "Zadanie w pobliżu: ${it.title}",
                             it.description ?: "",
                             id = (it.id % Int.MAX_VALUE).toInt(),
-                            contentIntent = navPending
+                            contentIntent = openPending,
+                            actionTitle = if (navPending != null) "Nawiguj" else null,
+                            actionIntent = navPending
                         )
                     }
                 }
