@@ -167,25 +167,13 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             try {
                 fused.lastLocation.addOnSuccessListener { loc ->
                     loc?.let {
-                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                        val newLoc = TaskLocation(it.latitude, it.longitude, 100f, null)
                         task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
                     }
                 }
             } catch (e: SecurityException) { }
         } else {
             Toast.makeText(context, "Brak zgody na lokalizację", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    val mapPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val lat = data?.getDoubleExtra("lat", Double.NaN) ?: Double.NaN
-            val lng = data?.getDoubleExtra("lng", Double.NaN) ?: Double.NaN
-            if (!lat.isNaN() && !lng.isNaN()) {
-                val newLoc = TaskLocation(lat, lng, 100f, "Wybrane miejsce")
-                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
-            }
         }
     }
 
@@ -637,7 +625,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                     Spacer(modifier = Modifier.height(12.dp))
 
                     // Przyciski akcji (Moja pozycja / Wybierz na mapie)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
                         FilledTonalButton(
                             onClick = {
                                 val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
@@ -645,7 +633,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     try {
                                         fused.lastLocation.addOnSuccessListener { loc ->
                                             loc?.let {
-                                                val newLoc = TaskLocation(it.latitude, it.longitude, 100f, "Aktualna lokalizacja")
+                                                // ustawiamy label = null żeby nie pojawiał się "Aktualna lokalizacja"
+                                                val newLoc = TaskLocation(it.latitude, it.longitude, 100f, null)
                                                 task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
                                             }
                                         }
@@ -654,25 +643,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                     locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("Moja pozycja", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-
-                        FilledTonalButton(
-                            onClick = {
-                                val intent = Intent(context, MapPickActivity::class.java)
-                                mapPickerLauncher.launch(intent)
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Wybierz", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
 
