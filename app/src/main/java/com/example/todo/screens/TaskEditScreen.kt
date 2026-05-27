@@ -57,6 +57,16 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Ekran tworzenia i edycji zadania.
+ *
+ * Obsługuje:
+ * - tytuł/opis/kategorię/priorytet,
+ * - daty i przypomnienia,
+ * - cykliczność,
+ * - lokalizacje i geokodowanie,
+ * - załączniki w pamięci aplikacji.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskId: Long?) {
@@ -722,6 +732,9 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     }
 }
 
+/**
+ * Zapisuje wybrany plik jako lokalny załącznik w pamięci aplikacji.
+ */
 private fun saveAttachmentToAppStorage(
     context: Context,
     sourceUri: Uri,
@@ -756,12 +769,18 @@ private fun sanitizeFileName(name: String): String {
     return if (cleaned.isBlank()) "attachment" else cleaned
 }
 
+/**
+ * Usuwa lokalny plik załącznika (jeśli to ścieżka lokalna).
+ */
 private fun deleteAttachmentFile(att: Attachment) {
     if (!att.localPath.startsWith("content://")) {
         runCatching { File(att.localPath).delete() }
     }
 }
 
+/**
+ * Zamienia regułę powtarzalności na czytelny tekst.
+ */
 private fun ruleToDisplay(rule: String?): String {
     if (rule.isNullOrBlank() || rule == "brak") return "Brak"
     return when (rule) {
@@ -800,6 +819,9 @@ private fun ruleToDisplay(rule: String?): String {
     }
 }
 
+/**
+ * Parsuje regułę `every:n:unit` do pary (liczba, jednostka po polsku).
+ */
 private fun parseEveryRule(rule: String?): Pair<String, String>? {
     if (rule == null) return null
     if (!rule.startsWith("every:")) return null
@@ -816,6 +838,9 @@ private fun parseEveryRule(rule: String?): Pair<String, String>? {
     return Pair(n, unitPol)
 }
 
+/**
+ * Chip priorytetu używany w ekranie edycji.
+ */
 @Composable
 private fun PriorityChip(p: Priority, selected: Boolean, onSelect: (Priority) -> Unit) {
     val label = when (p) {
@@ -841,6 +866,9 @@ private fun PriorityChip(p: Priority, selected: Boolean, onSelect: (Priority) ->
     )
 }
 
+/**
+ * Pobiera nazwę pliku z ContentResolver.
+ */
 private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? {
     var name: String? = null
     val cursor = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
