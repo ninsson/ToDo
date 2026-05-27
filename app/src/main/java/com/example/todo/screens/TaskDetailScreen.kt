@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.todo.data.Priority
+import com.example.todo.settings.SettingsRepository
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -36,6 +37,8 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
     var taskState by remember { mutableStateOf<com.example.todo.data.Task?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val settingsRepo = remember { SettingsRepository(context) }
+    val locationEnabled by settingsRepo.locationEnabled.collectAsState(initial = true)
 
     LaunchedEffect(taskId) {
         viewModel.getById(taskId) { t -> taskState = t }
@@ -194,7 +197,7 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                 }
             }
 
-            // --- ZAKTUALIZOWANA SEKCJA: LOKALIZACJE ---
+            // --- SEKCJA: LOKALIZACJE ---
             if (task.locations.isNotEmpty()) {
                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -202,6 +205,15 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                             Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(8.dp))
                             Text("Lokalizacje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        if (!locationEnabled) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Lokalizacja wyłączona w ustawieniach — nawigacja i mapa są niedostępne.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -229,37 +241,39 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
 
-                                    Spacer(modifier = Modifier.height(12.dp))
+                                    if (locationEnabled) {
+                                        Spacer(modifier = Modifier.height(12.dp))
 
-                                    // Akcje przypięte do prawej strony
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        TextButton(
-                                            onClick = {
-                                                val uri = Uri.parse("google.navigation:q=${loc.lat},${loc.lng}")
-                                                val i = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
-                                                context.startActivity(i)
+                                        // Akcje przypięte do prawej strony
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            TextButton(
+                                                onClick = {
+                                                    val uri = Uri.parse("google.navigation:q=${loc.lat},${loc.lng}")
+                                                    val i = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
+                                                    context.startActivity(i)
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Nawiguj")
                                             }
-                                        ) {
-                                            Icon(Icons.Default.Directions, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Nawiguj")
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        FilledTonalButton(
-                                            onClick = {
-                                                val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(task.title)})")
-                                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                                context.startActivity(mapIntent)
-                                            },
-                                            shape = RoundedCornerShape(12.dp)
-                                        ) {
-                                            Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
-                                            Spacer(Modifier.width(6.dp))
-                                            Text("Mapa")
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            FilledTonalButton(
+                                                onClick = {
+                                                    val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(task.title)})")
+                                                    val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                                    context.startActivity(mapIntent)
+                                                },
+                                                shape = RoundedCornerShape(12.dp)
+                                            ) {
+                                                Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                                                Spacer(Modifier.width(6.dp))
+                                                Text("Mapa")
+                                            }
                                         }
                                     }
                                 }
@@ -268,7 +282,7 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     }
                 }
             }
-            // --- KONIEC ZAKTUALIZOWANEJ SEKCJI ---
+            // --- KONIEC SEKCJI LOKALIZACJE ---
 
             if (task.attachments.isNotEmpty()) {
                 Text("Załączniki (${task.attachments.size})", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -319,7 +333,7 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(Modifier.width(12.dp))
                     Column {
                         Text("Szczegóły techniczne", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                         Text(

@@ -10,10 +10,16 @@ import kotlinx.coroutines.withContext
 import androidx.work.Data
 import com.example.todo.MainActivity
 import android.content.Context
+import com.example.todo.settings.SettingsRepository
 
 class ReminderWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
+            val notificationsOn = SettingsRepository(applicationContext).isNotificationsEnabled()
+            if (!notificationsOn) {
+                return@withContext Result.success()
+            }
+
             val title = inputData.getString("title") ?: "ToDo"
             val body = inputData.getString("body") ?: ""
             val notifId = inputData.getInt("id", 0)

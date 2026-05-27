@@ -6,6 +6,8 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private const val NAME = "todo_settings"
@@ -13,8 +15,12 @@ private val Context.dataStore by preferencesDataStore(NAME)
 
 object SettingsKeys {
     val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+    val LOCATION_ENABLED = booleanPreferencesKey("location_enabled")
+    val THEME_MODE = stringPreferencesKey("theme_mode")
     val CATEGORIES = stringSetPreferencesKey("categories")
 }
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
  * Domyślne kategorie (po polsku).
@@ -26,6 +32,18 @@ class SettingsRepository(private val context: Context) {
 
     val notificationsEnabled = context.dataStore.data
         .map { prefs -> prefs[SettingsKeys.NOTIFICATIONS_ENABLED] ?: true }
+
+    val locationEnabled = context.dataStore.data
+        .map { prefs -> prefs[SettingsKeys.LOCATION_ENABLED] ?: true }
+
+    val themeMode = context.dataStore.data
+        .map { prefs ->
+            when (prefs[SettingsKeys.THEME_MODE]) {
+                "LIGHT" -> ThemeMode.LIGHT
+                "DARK" -> ThemeMode.DARK
+                else -> ThemeMode.SYSTEM
+            }
+        }
 
     /**
      * Zwraca listę kategorii: domyślne + dodatkowe zapisane przez użytkownika.
@@ -42,6 +60,37 @@ class SettingsRepository(private val context: Context) {
     suspend fun setNotificationsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[SettingsKeys.NOTIFICATIONS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setLocationEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[SettingsKeys.LOCATION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { prefs ->
+            prefs[SettingsKeys.THEME_MODE] = mode.name
+        }
+    }
+
+    suspend fun isNotificationsEnabled(): Boolean {
+        val prefs: Preferences = context.dataStore.data.first()
+        return prefs[SettingsKeys.NOTIFICATIONS_ENABLED] ?: true
+    }
+
+    suspend fun isLocationEnabled(): Boolean {
+        val prefs: Preferences = context.dataStore.data.first()
+        return prefs[SettingsKeys.LOCATION_ENABLED] ?: true
+    }
+
+    suspend fun getThemeMode(): ThemeMode {
+        val prefs: Preferences = context.dataStore.data.first()
+        return when (prefs[SettingsKeys.THEME_MODE]) {
+            "LIGHT" -> ThemeMode.LIGHT
+            "DARK" -> ThemeMode.DARK
+            else -> ThemeMode.SYSTEM
         }
     }
 

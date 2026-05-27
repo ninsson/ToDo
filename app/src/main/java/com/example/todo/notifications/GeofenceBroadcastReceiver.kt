@@ -12,11 +12,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.example.todo.MainActivity
+import com.example.todo.settings.SettingsRepository
+import kotlinx.coroutines.runBlocking
 
 class GeofenceBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val geofencingEvent = GeofencingEvent.fromIntent(intent) ?: return
         if (geofencingEvent.hasError()) return
+
+        val notificationsOn = runBlocking { SettingsRepository(context).isNotificationsEnabled() }
+        val locationOn = runBlocking { SettingsRepository(context).isLocationEnabled() }
+        if (!notificationsOn || !locationOn) return
 
         val transition = geofencingEvent.geofenceTransition
         if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {

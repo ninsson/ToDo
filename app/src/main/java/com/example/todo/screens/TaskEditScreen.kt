@@ -64,6 +64,7 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     val settingsRepo = remember { SettingsRepository(context) }
     val categories by settingsRepo.categories.collectAsState(initial = listOf("Praca", "Osobiste", "Zakupy", "Zdrowie", "Inne"))
+    val locationEnabled by settingsRepo.locationEnabled.collectAsState(initial = true)
 
     var task by remember { mutableStateOf<Task?>(null) }
 
@@ -545,160 +546,170 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
             }
 
             // --- SEKCJA: LOKALIZACJE ---
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Lokalizacje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    }
+            if (locationEnabled) {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Lokalizacje", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                    // Pole adresu
-                    OutlinedTextField(
-                        value = addressInput,
-                        onValueChange = {
-                            addressInput = it
-                            suggestionsVisible = true
-                        },
-                        label = { Text("Znajdź po adresie...") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        leadingIcon = { Icon(Icons.Default.Search, null) },
-                        trailingIcon = {
-                            if (suggestionsLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else if (addressInput.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    addressInput = ""
-                                    suggestionsVisible = false
-                                }) {
-                                    Icon(Icons.Default.Clear, "Wyczyść")
+                        // Pole adresu
+                        OutlinedTextField(
+                            value = addressInput,
+                            onValueChange = {
+                                addressInput = it
+                                suggestionsVisible = true
+                            },
+                            label = { Text("Znajdź po adresie...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            leadingIcon = { Icon(Icons.Default.Search, null) },
+                            trailingIcon = {
+                                if (suggestionsLoading) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else if (addressInput.isNotEmpty()) {
+                                    IconButton(onClick = {
+                                        addressInput = ""
+                                        suggestionsVisible = false
+                                    }) {
+                                        Icon(Icons.Default.Clear, "Wyczyść")
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+
+                        // Inline podpowiedzi (NIE jako okno Popup/DropdownMenu - żeby nie chowało klawiatury)
+                        AnimatedVisibility(
+                            visible = suggestionsVisible && geoSuggestions.isNotEmpty(),
+                            enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
+                            exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
+                        ) {
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+                            ) {
+                                Column {
+                                    geoSuggestions.forEach { item ->
+                                        val (label, coords) = item
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { onSelectGeoSuggestion(item) }
+                                                .padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(label, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                                Text("%.5f, %.5f".format(coords.first, coords.second), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    }
                                 }
                             }
-                        },
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                        }
 
-                    // Inline podpowiedzi (NIE jako okno Popup/DropdownMenu - żeby nie chowało klawiatury)
-                    AnimatedVisibility(
-                        visible = suggestionsVisible && geoSuggestions.isNotEmpty(),
-                        enter = fadeIn() + expandVertically(expandFrom = Alignment.Top),
-                        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Top)
-                    ) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
-                        ) {
-                            Column {
-                                geoSuggestions.forEach { item ->
-                                    val (label, coords) = item
+                        suggestionsError?.let {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Przyciski akcji (Moja pozycja / Wybierz na mapie)
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            FilledTonalButton(
+                                onClick = {
+                                    val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                                    if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
+                                        try {
+                                            fused.lastLocation.addOnSuccessListener { loc ->
+                                                loc?.let {
+                                                    // ustawiamy label = null żeby nie pojawiał się "Aktualna lokalizacja"
+                                                    val newLoc = TaskLocation(it.latitude, it.longitude, 100f, null)
+                                                    task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                                }
+                                            }
+                                        } catch (e: SecurityException) { }
+                                    } else {
+                                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Moja pozycja", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.surfaceVariant)
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Lista dodanych lokalizacji
+                        val locations = task?.locations ?: emptyList()
+                        if (locations.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Brak przypisanych lokalizacji", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                locations.forEachIndexed { idx, loc ->
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { onSelectGeoSuggestion(item) }
-                                            .padding(16.dp),
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                            .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Place, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column {
-                                            Text(label, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                            Text("%.5f, %.5f".format(coords.first, coords.second), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(loc.label ?: "Miejsce ${idx + 1}", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text("%.5f, %.5f".format(loc.lat, loc.lng), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
-                                    }
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                }
-                            }
-                        }
-                    }
 
-                    suggestionsError?.let {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(start = 16.dp))
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Przyciski akcji (Moja pozycja / Wybierz na mapie)
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        FilledTonalButton(
-                            onClick = {
-                                val permissionCheck = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-                                if (permissionCheck == PackageManager.PERMISSION_GRANTED) {
-                                    try {
-                                        fused.lastLocation.addOnSuccessListener { loc ->
-                                            loc?.let {
-                                                // ustawiamy label = null żeby nie pojawiał się "Aktualna lokalizacja"
-                                                val newLoc = TaskLocation(it.latitude, it.longitude, 100f, null)
-                                                task = task?.copy(locations = (task?.locations ?: emptyList()) + newLoc)
+                                        Row {
+                                            IconButton(onClick = {
+                                                val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
+                                                val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
+                                                context.startActivity(mapIntent)
+                                            }) {
+                                                Icon(Icons.Default.Map, contentDescription = "Otwórz w Mapach", tint = MaterialTheme.colorScheme.primary)
+                                            }
+                                            IconButton(onClick = {
+                                                task = task?.copy(locations = locations.filterIndexed { i, _ -> i != idx })
+                                            }) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
                                             }
                                         }
-                                    } catch (e: SecurityException) { }
-                                } else {
-                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Moja pozycja", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.surfaceVariant)
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Lista dodanych lokalizacji
-                    val locations = task?.locations ?: emptyList()
-                    if (locations.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Brak przypisanych lokalizacji", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            locations.forEachIndexed { idx, loc ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                        .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(loc.label ?: "Miejsce ${idx + 1}", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text("%.5f, %.5f".format(loc.lat, loc.lng), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-
-                                    Row {
-                                        IconButton(onClick = {
-                                            val gmmIntentUri = Uri.parse("geo:${loc.lat},${loc.lng}?q=${loc.lat},${loc.lng}(${Uri.encode(title)})")
-                                            val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                            context.startActivity(mapIntent)
-                                        }) {
-                                            Icon(Icons.Default.Map, contentDescription = "Otwórz w Mapach", tint = MaterialTheme.colorScheme.primary)
-                                        }
-                                        IconButton(onClick = {
-                                            task = task?.copy(locations = locations.filterIndexed { i, _ -> i != idx })
-                                        }) {
-                                            Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
-                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+            } else {
+                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOff, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Lokalizacja wyłączona w ustawieniach. Włącz, aby dodawać miejsca i otwierać mapy.")
                     }
                 }
             }

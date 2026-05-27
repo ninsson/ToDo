@@ -4,26 +4,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.todo.notifications.GeofenceManager
+import com.example.todo.notifications.ReminderScheduler
 import com.example.todo.settings.SettingsRepository
+import com.example.todo.settings.ThemeMode
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
@@ -31,6 +34,8 @@ fun SettingsScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
 
     val notificationsEnabled by repo.notificationsEnabled.collectAsState(initial = true)
+    val locationEnabled by repo.locationEnabled.collectAsState(initial = true)
+    val themeMode by repo.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
     val categories by repo.categories.collectAsState(initial = emptyList())
 
     var newCategoryText by remember { mutableStateOf("") }
@@ -74,7 +79,7 @@ fun SettingsScreen(navController: NavController) {
                 ) {
                     ListItem(
                         headlineContent = { Text("Powiadomienia") },
-                        supportingContent = { Text("Zarządzaj alertami i dźwiękiem") },
+                        supportingContent = { Text("Przypomnienia z tej aplikacji") },
                         leadingContent = {
                             Icon(
                                 Icons.Default.Notifications,
@@ -86,30 +91,68 @@ fun SettingsScreen(navController: NavController) {
                             Switch(
                                 checked = notificationsEnabled,
                                 onCheckedChange = { checked ->
-                                    scope.launch { repo.setNotificationsEnabled(checked) }
+                                    scope.launch {
+                                        repo.setNotificationsEnabled(checked)
+                                        if (!checked) {
+                                            ReminderScheduler.cancelAllReminders(context)
+                                        }
+                                    }
                                 }
                             )
                         },
                         modifier = Modifier.clickable {
-                            scope.launch { repo.setNotificationsEnabled(!notificationsEnabled) }
+                            scope.launch {
+                                val next = !notificationsEnabled
+                                repo.setNotificationsEnabled(next)
+                                if (!next) {
+                                    ReminderScheduler.cancelAllReminders(context)
+                                }
+                            }
                         }
                     )
 
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
-                    SettingsItem(
-                        icon = Icons.Default.LocationOn,
-                        title = "Lokalizacja",
-                        subtitle = "Zadania oparte o miejsce",
-                        onClick = { /* TODO: Akcja dla lokalizacji */ }
+                    ListItem(
+                        headlineContent = { Text("Lokalizacja") },
+                        supportingContent = { Text("Dodawanie miejsc i nawigacja") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.LocationOn,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = locationEnabled,
+                                onCheckedChange = { checked ->
+                                    scope.launch {
+                                        repo.setLocationEnabled(checked)
+                                        if (!checked) {
+                                            GeofenceManager.removeAllGeofences(context)
+                                        }
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                val next = !locationEnabled
+                                repo.setLocationEnabled(next)
+                                if (!next) {
+                                    GeofenceManager.removeAllGeofences(context)
+                                }
+                            }
+                        }
                     )
                 }
             }
 
-            // Sekcja: Dane i synchronizacja
+            // Sekcja: Wygląd
             Column {
                 Text(
-                    text = "Konto i dane",
+                    text = "Wygląd",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
@@ -118,12 +161,36 @@ fun SettingsScreen(navController: NavController) {
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    SettingsItem(
-                        icon = Icons.Default.Backup,
-                        title = "Kopia zapasowa",
-                        subtitle = "Synchronizacja z kontem Google",
-                        onClick = { /* TODO: Akcja dla kopii zapasowej */ }
-                    )
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Tryb motywu", style = MaterialTheme.typography.titleMedium)
+                        }
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = themeMode == ThemeMode.SYSTEM,
+                                onClick = { scope.launch { repo.setThemeMode(ThemeMode.SYSTEM) } }
+                            )
+                            Text("Systemowy")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = themeMode == ThemeMode.LIGHT,
+                                onClick = { scope.launch { repo.setThemeMode(ThemeMode.LIGHT) } }
+                            )
+                            Text("Jasny")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = themeMode == ThemeMode.DARK,
+                                onClick = { scope.launch { repo.setThemeMode(ThemeMode.DARK) } }
+                            )
+                            Text("Ciemny")
+                        }
+                    }
                 }
             }
 
@@ -146,7 +213,7 @@ fun SettingsScreen(navController: NavController) {
                         Text("Dostępne kategorie", style = MaterialTheme.typography.titleMedium)
 
                         FlowRowCategories(
-                            categories = categories.ifEmpty { defaultCategories }, // Zabezpieczenie przed pustą listą
+                            categories = categories.ifEmpty { defaultCategories },
                             defaultList = defaultCategories,
                             onDelete = { cat -> scope.launch { repo.removeCategory(cat) } }
                         )
@@ -184,34 +251,6 @@ fun SettingsScreen(navController: NavController) {
     }
 }
 
-@Composable
-fun SettingsItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    ListItem(
-        headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
-        leadingContent = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
-        trailingContent = {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        modifier = Modifier.clickable { onClick() }
-    )
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowRowCategories(
@@ -219,7 +258,6 @@ private fun FlowRowCategories(
     defaultList: List<String>,
     onDelete: (String) -> Unit
 ) {
-    // Używamy FlowRow z biblioteki layout, aby automatycznie zawijać elementy do nowej linii
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -229,7 +267,7 @@ private fun FlowRowCategories(
             val isDefault = cat in defaultList
 
             AssistChip(
-                onClick = { /* Można dodać akcję po kliknięciu na kategorię */ },
+                onClick = { },
                 label = { Text(cat) },
                 trailingIcon = if (!isDefault) {
                     {

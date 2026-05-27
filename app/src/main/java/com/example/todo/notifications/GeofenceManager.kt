@@ -36,6 +36,8 @@ object GeofenceManager {
      * requestId format: "task_{taskId}_{index}"
      */
     fun addGeofencesForTask(context: Context, taskId: Long, locations: List<TaskLocation>) {
+        if (locations.isEmpty()) return
+
         val client = geofencingClient(context)
         val pending = makePendingIntent(context)
         val newIds = locations.mapIndexed { idx, _ -> "task_${taskId}_$idx" }
@@ -94,5 +96,21 @@ object GeofenceManager {
                     prefs(context).edit().remove(key).apply()
                 }
         }
+    }
+
+    /**
+     * Usuń wszystkie geofence'y aplikacji (przy wyłączeniu lokalizacji).
+     */
+    fun removeAllGeofences(context: Context) {
+        val client = geofencingClient(context)
+        val pending = makePendingIntent(context)
+        client.removeGeofences(pending)
+            .addOnSuccessListener {
+                Log.d(TAG, "All geofences removed")
+                prefs(context).edit().clear().apply()
+            }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "Failed to remove all geofences: ${e.message}", e)
+            }
     }
 }

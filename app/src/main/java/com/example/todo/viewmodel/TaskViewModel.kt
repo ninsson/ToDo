@@ -11,6 +11,7 @@ import com.example.todo.data.TaskStatus
 import com.example.todo.notifications.GeofenceManager
 import com.example.todo.notifications.ReminderScheduler
 import com.example.todo.repo.TaskRepository
+import com.example.todo.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -110,8 +111,14 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
 
             val id = repo.insert(taskToInsert)
             context?.let { ctx ->
-                if (taskToInsert.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, taskToInsert.copy(id = id))
-                if (taskToInsert.locations.isNotEmpty()) {
+                val settings = SettingsRepository(ctx)
+                val notificationsOn = settings.isNotificationsEnabled()
+                val locationOn = settings.isLocationEnabled()
+
+                if (notificationsOn && taskToInsert.reminderTimeMillis != null) {
+                    ReminderScheduler.scheduleReminder(ctx, taskToInsert.copy(id = id))
+                }
+                if (locationOn && taskToInsert.locations.isNotEmpty()) {
                     GeofenceManager.addGeofencesForTask(ctx, id, taskToInsert.locations)
                 }
             }
@@ -123,12 +130,18 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         viewModelScope.launch {
             repo.update(task)
             context?.let { ctx ->
+                val settings = SettingsRepository(ctx)
+                val notificationsOn = settings.isNotificationsEnabled()
+                val locationOn = settings.isLocationEnabled()
+
                 ReminderScheduler.cancelReminder(ctx, task.id)
-                if (task.reminderTimeMillis != null) ReminderScheduler.scheduleReminder(ctx, task)
+                if (notificationsOn && task.reminderTimeMillis != null) {
+                    ReminderScheduler.scheduleReminder(ctx, task)
+                }
 
                 // geofences
                 GeofenceManager.removeGeofencesForTask(ctx, task.id)
-                if (task.locations.isNotEmpty()) {
+                if (locationOn && task.locations.isNotEmpty()) {
                     GeofenceManager.addGeofencesForTask(ctx, task.id, task.locations)
                 }
             }

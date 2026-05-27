@@ -5,19 +5,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.rememberNavController
 import com.example.todo.ui.theme.ToDoTheme
 import com.example.todo.viewmodel.TaskViewModel
 import com.example.todo.repo.TaskRepository
-import com.example.todo.DatabaseProvider
-import androidx.compose.runtime.LaunchedEffect
-import androidx.navigation.compose.rememberNavController
+import com.example.todo.settings.SettingsRepository
+import com.example.todo.settings.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
 
 class MainActivity : ComponentActivity() {
 
@@ -36,7 +38,15 @@ class MainActivity : ComponentActivity() {
         navIntentFlow.value = intent
 
         setContent {
-            ToDoTheme {
+            val settingsRepo = remember { SettingsRepository(applicationContext) }
+            val themeMode by settingsRepo.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val darkTheme = when (themeMode) {
+                ThemeMode.DARK -> true
+                ThemeMode.LIGHT -> false
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+
+            ToDoTheme(darkTheme = darkTheme) {
                 val nav = rememberNavController()
 
                 // pobieramy aktualny intent (może być null)

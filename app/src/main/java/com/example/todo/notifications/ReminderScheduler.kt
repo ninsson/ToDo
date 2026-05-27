@@ -6,6 +6,8 @@ import com.example.todo.data.Task
 import java.util.concurrent.TimeUnit
 
 object ReminderScheduler {
+    private const val TAG_REMINDER = "reminder"
+
     fun scheduleReminder(context: Context, task: Task) {
         val time = task.reminderTimeMillis ?: return
         val delay = time - System.currentTimeMillis()
@@ -15,6 +17,7 @@ object ReminderScheduler {
         val work = OneTimeWorkRequestBuilder<ReminderWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .setInputData(data)
+            .addTag(TAG_REMINDER)
             .build()
 
         WorkManager.getInstance(context).enqueueUniqueWork(
@@ -26,5 +29,9 @@ object ReminderScheduler {
 
     fun cancelReminder(context: Context, taskId: Long) {
         WorkManager.getInstance(context).cancelUniqueWork("reminder_task_$taskId")
+    }
+
+    fun cancelAllReminders(context: Context) {
+        WorkManager.getInstance(context).cancelAllWorkByTag(TAG_REMINDER)
     }
 }
