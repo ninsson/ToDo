@@ -21,11 +21,24 @@ import com.example.todo.settings.ThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+/**
+ * Główna aktywność aplikacji.
+ *
+ * Odpowiada za:
+ * - inicjalizację bazy i repozytorium,
+ * - wczytanie ustawień motywu,
+ * - start nawigacji i obsługę intentów (np. z widgetu lub powiadomień).
+ */
 class MainActivity : ComponentActivity() {
 
-    // przepływ intencji — pozwala komunikować nowe intenty do composable (onCreate i onNewIntent)
+    /**
+     * Strumień intencji używany do obsługi wejść z zewnątrz (widget/powiadomienia).
+     */
     val navIntentFlow = MutableStateFlow<Intent?>(null)
 
+    /**
+     * Inicjalizacja UI Compose i konfiguracja startowego ekranu na podstawie intentu.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -94,14 +107,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Obsługa nowych intentów (np. gdy użytkownik kliknie powiadomienie).
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         intent ?: return
 
         // ustaw nowy intent dla activity
         setIntent(intent)
-
-        // Bezpiecznie ustaw wartość flow w lifecycleScope (na głównym wątku)
+        
         lifecycleScope.launch {
             navIntentFlow.value = intent
         }
