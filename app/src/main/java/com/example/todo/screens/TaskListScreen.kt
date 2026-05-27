@@ -37,6 +37,14 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Ekran listy zadań.
+ *
+ * Zapewnia:
+ * - wyszukiwanie, filtrowanie i sortowanie,
+ * - gesty swipe (ukończ/usuń),
+ * - szybkie przejście do tworzenia zadania.
+ */
 @OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
@@ -232,6 +240,9 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
     }
 }
 
+/**
+ * Chip filtra używany w poziomym pasku filtrów.
+ */
 @Composable
 private fun FilterChipSelectable(label: String, option: FilterOption, current: FilterOption, onSelected: (FilterOption) -> Unit) {
     val selected = option == current
@@ -325,6 +336,9 @@ fun TaskRowPriorityIndicator(task: Task, onClick: () -> Unit, onToggleDone: () -
     }
 }
 
+/**
+ * Krótki wskaźnik priorytetu (kolor/kropka).
+ */
 private fun priorityColor(p: Priority): Color {
     return when (p) {
         Priority.HIGH -> Color(0xFFEF4444)     // Czerwony
