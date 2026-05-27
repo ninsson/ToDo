@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
 
         // ustaw nowy intent dla activity
         setIntent(intent)
-        
+
         lifecycleScope.launch {
             navIntentFlow.value = intent
         }

@@ -11,6 +11,11 @@ import com.example.todo.screens.TaskEditScreen
 import com.example.todo.screens.TaskDetailScreen
 import com.example.todo.screens.SettingsScreen
 
+/**
+ * Główny host nawigacji Compose.
+ *
+ * Definiuje dostępne trasy i mapuje je na ekrany aplikacji.
+ */
 @Composable
 fun MainNavHost(navController: NavHostController, viewModel: TaskViewModel, startDestination: String = "list") {
     NavHost(navController = navController, startDestination = startDestination) {
