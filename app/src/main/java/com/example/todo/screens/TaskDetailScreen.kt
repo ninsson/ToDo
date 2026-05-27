@@ -35,6 +35,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
+/**
+ * Ekran szczegółów zadania.
+ *
+ * Wyświetla pełne informacje o zadaniu, załączniki i lokalizacje,
+ * umożliwia edycję oraz usuwanie.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, taskId: Long) {
@@ -363,6 +369,9 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
     }
 }
 
+/**
+ * Zwraca Uri dla załącznika (FileProvider dla lokalnych ścieżek).
+ */
 private fun attachmentUri(context: Context, att: Attachment): Uri {
     return if (att.localPath.startsWith("content://")) {
         Uri.parse(att.localPath)
@@ -375,6 +384,9 @@ private fun attachmentUri(context: Context, att: Attachment): Uri {
     }
 }
 
+/**
+ * Pomocnicza funkcja do wyświetlania priorytetu w formie etykiety.
+ */
 @Composable
 private fun PriorityIndicatorSimple(priority: Priority) {
     val label = when (priority) {
