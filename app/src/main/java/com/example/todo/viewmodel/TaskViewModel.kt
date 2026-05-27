@@ -31,14 +31,26 @@ enum class FilterOption { ALL, TODAY, OVERDUE, HIGH_PRIORITY, PENDING, DONE }
 class TaskViewModel(private val repo: TaskRepository, private val context: Context? = null) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
+
+    /** Bieżąca opcja sortowania. */
     private val _sortOption = MutableStateFlow(SortOption.PRIORITY)
+
+    /** Bieżąca opcja filtrowania. */
     private val _filterOption = MutableStateFlow(FilterOption.ALL)
 
+    /** Aktualizacja wyszukiwania. */
     fun setSearchQuery(q: String) { _searchQuery.value = q }
+
+    /** Aktualizacja sortowania. */
     fun setSortOption(s: SortOption) { _sortOption.value = s }
+
+    /** Aktualizacja filtra. */
     fun setFilterOption(f: FilterOption) { _filterOption.value = f }
 
-    // combine repo.observeAll() with search/filter/sort
+    /**
+     * Widok listy połączony z: wyszukiwaniem, filtrowaniem i sortowaniem.
+     * Dodatkowo grupuje zadania wykonane na końcu.
+     */
     val visibleTasks: StateFlow<List<Task>> = combine(
         repo.observeAll(),
         _searchQuery.debounce(250),
@@ -92,7 +104,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                     return@Comparator b.priority.ordinal.compareTo(a.priority.ordinal)
                 })
             }
-            SortOption.CREATED_AT -> {
                 result.sortedByDescending { it.createdAt }
             }
         }
