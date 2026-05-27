@@ -104,16 +104,20 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                     return@Comparator b.priority.ordinal.compareTo(a.priority.ordinal)
                 })
             }
-                result.sortedByDescending { it.createdAt }
-            }
+            SortOption.CREATED_AT -> result.sortedByDescending { it.createdAt }
         }
 
         val (notDone, done) = sorted.partition { it.status != TaskStatus.DONE }
         notDone + done
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    /** Alias na listę zadań dla UI. */
     val tasks: StateFlow<List<Task>> = visibleTasks
 
+    /**
+     * Utwórz zadanie i opcjonalnie zaplanuj powiadomienia/geofence.
+     * Dla zadań cyklicznych bez terminu ustawia `dueAt` na `createdAt`.
+     */
     fun create(task: Task, onDone: (Long) -> Unit = {}) {
         viewModelScope.launch {
             val taskToInsert = if (!task.recurringRule.isNullOrBlank() && task.dueAt == null) {
@@ -139,6 +143,9 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /**
+     * Zaktualizuj zadanie i zsynchronizuj powiadomienia/geofence z nowym stanem.
+     */
     fun update(task: Task) {
         viewModelScope.launch {
             repo.update(task)
@@ -152,7 +159,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                     ReminderScheduler.scheduleReminder(ctx, task)
                 }
 
-                // geofences
                 GeofenceManager.removeGeofencesForTask(ctx, task.id)
                 if (locationOn && task.locations.isNotEmpty()) {
                     GeofenceManager.addGeofencesForTask(ctx, task.id, task.locations)
@@ -161,6 +167,9 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /**
+     * Usuń zadanie, anuluj powiadomienia/geofence i wyczyść lokalne załączniki.
+     */
     fun delete(task: Task) {
         viewModelScope.launch {
             repo.delete(task)
@@ -172,12 +181,14 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /** Pobierz zadanie asynchronicznie i zwróć przez callback. */
     fun getById(id: Long, callback: (Task?) -> Unit) {
         viewModelScope.launch {
             callback(repo.getById(id))
         }
     }
 
+    /** Usuń fizyczne pliki załączników (tylko lokalne ścieżki). */
     private fun deleteAttachmentFiles(attachments: List<Attachment>) {
         attachments.forEach { att ->
             if (!att.localPath.startsWith("content://")) {
@@ -186,6 +197,10 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /**
+     * Wylicz kolejny termin wystąpienia na podstawie reguły powtarzalności.
+     * Obsługuje stałe reguły i niestandardowy format `every:n:unit`.
+     */
     private fun computeNextMillis(currentMillis: Long?, rule: String?): Long? {
         if (currentMillis == null || rule.isNullOrBlank()) return null
         val zone = ZoneId.systemDefault()
@@ -207,13 +222,14 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                             else -> null
                         }
                     } else null
-                } else {
-                    null
-                }
+                } else null
             }
         }
     }
 
+    /**
+     * Oznacz jako wykonane i – jeśli zadanie cykliczne – utwórz kolejne wystąpienie.
+     */
     fun completeTask(task: Task) {
         if (task.status == TaskStatus.DONE) return
 
@@ -240,7 +256,6 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                         createdAt = System.currentTimeMillis(),
                         dueAt = nextBase,
                         reminderTimeMillis = nextReminder,
-                        // zachowujemy lokalizacje, żeby nowe wystąpienie miało te same geofence'y
                         locations = task.locations
                     )
 
@@ -250,6 +265,7 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /** Przywróć zadanie z wykonanych do oczekujących. */
     fun reopenTask(task: Task) {
         if (task.status == TaskStatus.PENDING) return
         viewModelScope.launch {
@@ -258,6 +274,7 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         }
     }
 
+    /** Przełącz priorytet w cyklu LOW → MEDIUM → HIGH → LOW. */
     fun cyclePriority(task: Task) {
         val next = when (task.priority) {
             Priority.LOW -> Priority.MEDIUM
@@ -267,10 +284,14 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         update(task.copy(priority = next))
     }
 
+    /** Ustaw konkretny priorytet. */
     fun setPriority(task: Task, p: Priority) {
         update(task.copy(priority = p))
     }
 
+    /**
+     * Factory do tworzenia TaskViewModel z repozytorium i kontekstem.
+     */
     class Factory(private val repo: TaskRepository, private val context: Context? = null) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
