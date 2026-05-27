@@ -53,6 +53,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -84,6 +85,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
     var showCustomRecurrenceDialog by remember { mutableStateOf(false) }
     var customCount by remember { mutableStateOf("1") }
     var customUnit by remember { mutableStateOf("dni") }
+
+    val draftId = remember { UUID.randomUUID().toString() }
 
     // ADDRESS / GEOCODER states
     var addressInput by remember { mutableStateOf("") }
@@ -153,13 +156,12 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
     val pickDocumentLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let {
-            try {
-                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: Exception) { }
-            val mime = context.contentResolver.getType(it)
-            val name = queryDisplayName(context.contentResolver, it) ?: it.toString()
-            val att = Attachment(it.toString(), mime, name)
-            task = task?.copy(attachments = (task?.attachments ?: emptyList()) + att)
+            val saved = saveAttachmentToAppStorage(context, it, task?.id, draftId)
+            if (saved != null) {
+                task = task?.copy(attachments = (task?.attachments ?: emptyList()) + saved)
+            } else {
+                Toast.makeText(context, "Nie udało się zapisać pliku", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -536,7 +538,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
                                 }
                             }
                             IconButton(onClick = {
-                                task = task?.copy(attachments = task!!.attachments.filter { it.uri != att.uri })
+                                deleteAttachmentFile(att)
+                                task = task?.copy(attachments = task!!.attachments.filter { it.localPath != att.localPath })
                             }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Usuń", tint = MaterialTheme.colorScheme.error)
                             }
@@ -716,6 +719,46 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 
             Spacer(modifier = Modifier.height(72.dp))
         }
+    }
+}
+
+private fun saveAttachmentToAppStorage(
+    context: Context,
+    sourceUri: Uri,
+    taskId: Long?,
+    draftId: String
+): Attachment? {
+    val resolver = context.contentResolver
+    val name = queryDisplayName(resolver, sourceUri) ?: "attachment"
+    val mime = resolver.getType(sourceUri)
+
+    val ownerDir = if (taskId != null && taskId > 0L) "task_$taskId" else "draft_$draftId"
+    val baseDir = File(context.filesDir, "attachments/$ownerDir")
+    if (!baseDir.exists()) baseDir.mkdirs()
+
+    val safeName = sanitizeFileName(name)
+    val uniqueName = "${System.currentTimeMillis()}_${UUID.randomUUID()}_$safeName"
+    val dest = File(baseDir, uniqueName)
+
+    val input = resolver.openInputStream(sourceUri) ?: return null
+    input.use { inStream ->
+        dest.outputStream().use { outStream ->
+            inStream.copyTo(outStream)
+        }
+    }
+
+    return Attachment(localPath = dest.absolutePath, mimeType = mime, name = name)
+}
+
+private fun sanitizeFileName(name: String): String {
+    val trimmed = name.trim()
+    val cleaned = trimmed.replace(Regex("""[\\/:*?"<>|]"""), "_")
+    return if (cleaned.isBlank()) "attachment" else cleaned
+}
+
+private fun deleteAttachmentFile(att: Attachment) {
+    if (!att.localPath.startsWith("content://")) {
+        runCatching { File(att.localPath).delete() }
     }
 }
 

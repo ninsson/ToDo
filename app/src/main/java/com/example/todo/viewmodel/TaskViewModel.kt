@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
 import com.example.todo.data.Task
 import com.example.todo.data.TaskLocation
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -155,12 +157,21 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
                 ReminderScheduler.cancelReminder(ctx, task.id)
                 GeofenceManager.removeGeofencesForTask(ctx, task.id)
             }
+            deleteAttachmentFiles(task.attachments)
         }
     }
 
     fun getById(id: Long, callback: (Task?) -> Unit) {
         viewModelScope.launch {
             callback(repo.getById(id))
+        }
+    }
+
+    private fun deleteAttachmentFiles(attachments: List<Attachment>) {
+        attachments.forEach { att ->
+            if (!att.localPath.startsWith("content://")) {
+                runCatching { File(att.localPath).delete() }
+            }
         }
     }
 

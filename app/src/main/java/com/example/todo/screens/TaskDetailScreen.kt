@@ -1,5 +1,6 @@
 package com.example.todo.screens
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -23,11 +24,14 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.navigation.NavController
+import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
 import com.example.todo.settings.SettingsRepository
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -295,9 +299,10 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                                 .clickable {
                                     try {
+                                        val uri = attachmentUri(context, att)
                                         val intent = Intent(Intent.ACTION_VIEW).apply {
-                                            data = Uri.parse(att.uri)
-                                            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                            setDataAndType(uri, att.mimeType ?: "*/*")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         }
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
@@ -355,6 +360,18 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+private fun attachmentUri(context: Context, att: Attachment): Uri {
+    return if (att.localPath.startsWith("content://")) {
+        Uri.parse(att.localPath)
+    } else {
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            File(att.localPath)
+        )
     }
 }
 
