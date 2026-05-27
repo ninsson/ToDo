@@ -28,6 +28,7 @@ import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import com.example.todo.data.Attachment
 import com.example.todo.data.Priority
+import com.example.todo.data.TaskStatus
 import com.example.todo.settings.SettingsRepository
 import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
@@ -122,9 +123,14 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val statusLabel = when (task.status) {
+                        TaskStatus.PENDING -> "Oczekujące"
+                        TaskStatus.DONE -> "Wykonane"
+                        TaskStatus.ARCHIVED -> "Zarchiwizowane"
+                    }
                     AssistChip(
                         onClick = {},
-                        label = { Text("Status: ${task.status}") },
+                        label = { Text(statusLabel) },
                         colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     )
                     PriorityIndicatorSimple(priority = task.priority)
