@@ -26,6 +26,15 @@ import com.example.todo.settings.SettingsRepository
 import com.example.todo.settings.ThemeMode
 import kotlinx.coroutines.launch
 
+/**
+ * Ekran ustawień aplikacji.
+ *
+ * Umożliwia konfigurację:
+ * - powiadomień,
+ * - lokalizacji,
+ * - motywu,
+ * - kategorii zadań.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -251,6 +260,9 @@ fun SettingsScreen(navController: NavController) {
     }
 }
 
+/**
+ * Lista chipów kategorii z możliwością usuwania niestandardowych.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FlowRowCategories(
