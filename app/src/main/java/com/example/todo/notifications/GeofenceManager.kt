@@ -16,24 +16,41 @@ private const val TAG = "GeofenceManager"
 private const val PREFS_NAME = "geofence_prefs"
 private const val PREF_KEY_PREFIX = "task_geofences_"
 
+/**
+ * Singleton zarządzający cyklem życia geofence'ów.
+ * Odpowiada za rejestrację stref w systemie Google Location Services oraz ich usuwanie.
+ */
 object GeofenceManager {
+
+    /**
+     * Zwraca instancję klienta geofencingu.
+     */
     private fun geofencingClient(context: Context): GeofencingClient =
         LocationServices.getGeofencingClient(context)
 
+    /**
+     * Tworzy PendingIntent, który uruchamia [GeofenceBroadcastReceiver] przy wystąpieniu zdarzenia.
+     */
     private fun makePendingIntent(context: Context): PendingIntent {
         val intent = Intent(context, GeofenceBroadcastReceiver::class.java)
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getBroadcast(context, 0, intent, flags)
     }
 
+    /**
+     * Zwraca SharedPreferences do przechowywania ID zarejestrowanych geofence'ów.
+     */
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /**
-     * Dodaj geofence'y dla danego zadania. Przechowujemy requestId list w SharedPreferences,
-     * żeby móc je później usunąć.
+     * Rejestruje geofence'y dla podanego zadania.
+     * Automatycznie usuwa poprzednio zarejestrowane strefy dla tego samego ID zadania,
+     * aby uniknąć duplikatów.
      *
-     * requestId format: "task_{taskId}_{index}"
+     * @param context Kontekst aplikacji.
+     * @param taskId Unikalny identyfikator zadania.
+     * @param locations Lista lokalizacji powiązanych z zadaniem.
      */
     fun addGeofencesForTask(context: Context, taskId: Long, locations: List<TaskLocation>) {
         if (locations.isEmpty()) return
@@ -42,7 +59,7 @@ object GeofenceManager {
         val pending = makePendingIntent(context)
         val newIds = locations.mapIndexed { idx, _ -> "task_${taskId}_$idx" }
 
-        // remove previous ones (best-effort)
+        // Usunięcie starych geofence'ów przed dodaniem nowych (best-effort)
         val oldIds = prefs(context).getStringSet(PREF_KEY_PREFIX + taskId, emptySet())?.toList() ?: emptyList()
         if (oldIds.isNotEmpty()) {
             client.removeGeofences(oldIds).addOnSuccessListener {
@@ -52,7 +69,7 @@ object GeofenceManager {
             }
         }
 
-        // build request with all geofences
+        // Budowa żądania geofencingu
         val builder = GeofencingRequest.Builder().setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
         locations.forEachIndexed { idx, loc ->
             val id = "task_${taskId}_$idx"
@@ -66,10 +83,11 @@ object GeofenceManager {
         }
         val request = builder.build()
 
+        // Rejestracja w API Google
         client.addGeofences(request, pending)
             .addOnSuccessListener {
                 Log.d(TAG, "Geofences added for task $taskId (count=${locations.size})")
-                // store ids
+                // Zapisanie ID w preferencjach do późniejszego usunięcia
                 prefs(context).edit().putStringSet(PREF_KEY_PREFIX + taskId, newIds.toSet()).apply()
             }
             .addOnFailureListener { e ->
@@ -78,7 +96,10 @@ object GeofenceManager {
     }
 
     /**
-     * Usuń wszystkie geofence'y powiązane z zadaniem (korzysta z listy requestId w prefs).
+     * Usuwa wszystkie geofence'y powiązane z konkretnym zadaniem.
+     *
+     * @param context Kontekst aplikacji.
+     * @param taskId ID zadania, którego strefy mają zostać usunięte.
      */
     fun removeGeofencesForTask(context: Context, taskId: Long) {
         val client = geofencingClient(context)
@@ -92,14 +113,16 @@ object GeofenceManager {
                 }
                 .addOnFailureListener { e ->
                     Log.w(TAG, "Failed to remove geofences for task $taskId: ${e.message}", e)
-                    // still remove key to avoid stale ids (optional)
                     prefs(context).edit().remove(key).apply()
                 }
         }
     }
 
     /**
-     * Usuń wszystkie geofence'y aplikacji (przy wyłączeniu lokalizacji).
+     * Czyści wszystkie zarejestrowane geofence'y dla całej aplikacji.
+     * Używane np. przy całkowitym wyłączeniu funkcji lokalizacji w aplikacji.
+     *
+     * @param context Kontekst aplikacji.
      */
     fun removeAllGeofences(context: Context) {
         val client = geofencingClient(context)

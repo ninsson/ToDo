@@ -58,14 +58,13 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 /**
- * Ekran tworzenia i edycji zadania.
+ * Ekran edycji i tworzenia zadań.
+ * Obsługuje bogaty zestaw atrybutów zadania: od podstawowych pól tekstowych,
+ * przez daty przypomnień, aż po lokalizacje geograficzne i załączniki.
  *
- * Obsługuje:
- * - tytuł/opis/kategorię/priorytet,
- * - daty i przypomnienia,
- * - cykliczność,
- * - lokalizacje i geokodowanie,
- * - załączniki w pamięci aplikacji.
+ * @param navController Kontroler nawigacji.
+ * @param viewModel ViewModel zarządzający cyklem życia zadania (CRUD).
+ * @param taskId ID edytowanego zadania lub null w przypadku tworzenia nowego.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -733,7 +732,8 @@ fun TaskEditScreen(navController: NavController, viewModel: TaskViewModel, taskI
 }
 
 /**
- * Zapisuje wybrany plik jako lokalny załącznik w pamięci aplikacji.
+ * Zapisuje załącznik w dedykowanym katalogu aplikacji.
+ * Zapewnia izolację plików między zadaniami a wersjami roboczymi (drafts).
  */
 private fun saveAttachmentToAppStorage(
     context: Context,
@@ -820,7 +820,8 @@ private fun ruleToDisplay(rule: String?): String {
 }
 
 /**
- * Parsuje regułę `every:n:unit` do pary (liczba, jednostka po polsku).
+ * Parsuje regułę typu "every:n:unit" na parę (liczba, jednostka).
+ * Przykład: "every:2:days" -> ("2", "dni").
  */
 private fun parseEveryRule(rule: String?): Pair<String, String>? {
     if (rule == null) return null

@@ -28,6 +28,10 @@ import java.time.ZoneId
 enum class SortOption { PRIORITY, DUE_DATE, CREATED_AT }
 enum class FilterOption { ALL, TODAY, OVERDUE, HIGH_PRIORITY, PENDING, DONE }
 
+/**
+ * Główny ViewModel zarządzający logiką aplikacji.
+ * Odpowiada za łączenie warstwy danych, ustawień użytkownika oraz logiki powiadomień.
+ */
 class TaskViewModel(private val repo: TaskRepository, private val context: Context? = null) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")

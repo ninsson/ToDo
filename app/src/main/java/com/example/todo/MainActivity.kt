@@ -23,16 +23,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Główna aktywność aplikacji.
- *
- * Odpowiada za:
- * - inicjalizację bazy i repozytorium,
- * - wczytanie ustawień motywu,
- * - start nawigacji i obsługę intentów (np. z widgetu lub powiadomień).
+ * Odpowiada za konfigurację środowiska (baza danych, ViewModel, nawigacja)
+ * oraz obsługę zewnętrznych zdarzeń (np. otwieranie aplikacji przez powiadomienia).
  */
 class MainActivity : ComponentActivity() {
 
     /**
-     * Strumień intencji używany do obsługi wejść z zewnątrz (widget/powiadomienia).
+     * Strumień intencji używany do obsługi wejść z zewnątrz.
+     * Pozwala na asynchroniczne reagowanie na intencje wewnątrz UI (Compose).
      */
     val navIntentFlow = MutableStateFlow<Intent?>(null)
 
@@ -62,10 +60,8 @@ class MainActivity : ComponentActivity() {
             ToDoTheme(darkTheme = darkTheme) {
                 val nav = rememberNavController()
 
-                // pobieramy aktualny intent (może być null)
                 val startIntent by navIntentFlow.collectAsState()
 
-                // jeśli startIntent ma extra open_create = true -> startujemy bezpośrednio na "create"
                 val initialDestination = remember(startIntent) {
                     val i = startIntent
                     if (i != null && i.getBooleanExtra("open_create", false)) {
@@ -83,7 +79,7 @@ class MainActivity : ComponentActivity() {
                     startDestination = initialDestination
                 )
 
-                // dalej reagujemy na przychodzące intenty (np. otwarcie zadania szczegółów)
+                // dalej reagujemy na przychodzące intenty
                 LaunchedEffect(startIntent) {
                     val i = startIntent ?: return@LaunchedEffect
                     val openTaskId = i.getLongExtra("open_task_id", -1L)
@@ -97,7 +93,6 @@ class MainActivity : ComponentActivity() {
                         }
 
                         openCreate -> {
-                            // Jeśli już ustawiliśmy startDestination na "create", nic więcej nie trzeba robić.
                         }
                     }
 
@@ -108,7 +103,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Obsługa nowych intentów (np. gdy użytkownik kliknie powiadomienie).
+     * Wywoływane, gdy system dostarcza nową intencję do działającej już aplikacji
+     * (np. po kliknięciu powiadomienia, gdy aplikacja była w tle).
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

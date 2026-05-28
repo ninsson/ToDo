@@ -39,8 +39,15 @@ import java.util.*
 /**
  * Ekran szczegółów zadania.
  *
- * Wyświetla pełne informacje o zadaniu, załączniki i lokalizacje,
- * umożliwia edycję oraz usuwanie.
+ * Odpowiada za:
+ * - Pobieranie i prezentację pełnego stanu zadania (tytuł, opis, priorytet).
+ * - Zarządzanie czasem (terminy, przypomnienia) i powtarzalnością.
+ * - Wyświetlanie listy powiązanych lokalizacji z funkcjonalnością nawigacji (Mapy Google).
+ * - Obsługę załączników z bezpiecznym udostępnianiem plików przez [FileProvider].
+ *
+ * @param navController Kontroler nawigacji.
+ * @param viewModel ViewModel dostarczający dane zadania.
+ * @param taskId ID zadania, którego szczegóły mają zostać wyświetlone.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -376,7 +383,8 @@ fun TaskDetailScreen(navController: NavController, viewModel: TaskViewModel, tas
 }
 
 /**
- * Zwraca Uri dla załącznika (FileProvider dla lokalnych ścieżek).
+ * Pomocnicza funkcja generująca bezpieczny identyfikator URI dla załączników.
+ * Obsługuje zarówno zasoby lokalne, jak i systemowe treści (content://).
  */
 private fun attachmentUri(context: Context, att: Attachment): Uri {
     return if (att.localPath.startsWith("content://")) {
@@ -391,7 +399,8 @@ private fun attachmentUri(context: Context, att: Attachment): Uri {
 }
 
 /**
- * Pomocnicza funkcja do wyświetlania priorytetu w formie etykiety.
+ * Komponent wizualizujący priorytet zadania za pomocą kolorowej kropki i etykiety.
+ * * @param priority Wartość enum określająca priorytet (LOW, MEDIUM, HIGH).
  */
 @Composable
 private fun PriorityIndicatorSimple(priority: Priority) {

@@ -2,33 +2,49 @@ package com.example.todo.repo
 
 import com.example.todo.data.Task
 import com.example.todo.data.TaskDao
+import com.example.todo.data.TaskStatus
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Repozytorium zadań – cienka warstwa nad DAO.
+ * Repozytorium zadań – cienka warstwa abstrakcji nad [TaskDao].
  *
- * Abstrahuje dostęp do bazy i upraszcza użycie w ViewModelu.
+ * Odpowiada za dostarczanie danych do ViewModelu i izoluje warstwę prezentacji
+ * od szczegółów implementacji bazy danych.
+ *
+ * @param dao Interfejs dostępu do danych (Room DAO).
  */
 class TaskRepository(private val dao: TaskDao) {
 
-    /** Obserwuj wszystkie zadania w bazie. */
+    /** * Zwraca strumień wszystkich zadań w bazie.
+     * Użyj w ViewModelu, aby reagować na każdą zmianę danych w czasie rzeczywistym.
+     */
     fun observeAll(): Flow<List<Task>> = dao.observeAll()
 
-    /** Pobierz zadanie po ID. */
+    /** * Pobiera jednorazowy stan zadania o podanym identyfikatorze.
+     * @param id Unikalne ID zadania.
+     */
     suspend fun getById(id: Long): Task? = dao.getById(id)
 
-    /** Wstaw nowe zadanie i zwróć wygenerowane ID. */
+    /** * Wstawia nowe zadanie do bazy danych.
+     * @return Wygenerowane przez bazę ID wstawionego wiersza.
+     */
     suspend fun insert(task: Task): Long = dao.insert(task)
 
-    /** Zaktualizuj istniejące zadanie. */
+    /** * Aktualizuje parametry istniejącego zadania.
+     */
     suspend fun update(task: Task) = dao.update(task)
 
-    /** Usuń zadanie. */
+    /** * Usuwa zadanie z bazy danych.
+     */
     suspend fun delete(task: Task) = dao.delete(task)
 
-    /** Wyszukaj po tytule lub opisie (LIKE). */
+    /** * Wyszukuje zadania zawierające frazę w tytule lub opisie.
+     * @param q Fraza wyszukiwania.
+     */
     fun search(q: String) = dao.search("%$q%")
 
-    /** Obserwuj zadania o danym statusie. */
-    fun observeByStatus(status: com.example.todo.data.TaskStatus) = dao.observeByStatus(status)
+    /** * Obserwuje zadania przefiltrowane według statusu.
+     * @param status Status zadania (np. PENDING, COMPLETED).
+     */
+    fun observeByStatus(status: TaskStatus) = dao.observeByStatus(status)
 }

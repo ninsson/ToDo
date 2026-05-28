@@ -27,13 +27,14 @@ import com.example.todo.settings.ThemeMode
 import kotlinx.coroutines.launch
 
 /**
- * Ekran ustawień aplikacji.
+ * Ekran ustawień aplikacji użytkownika.
  *
- * Umożliwia konfigurację:
- * - powiadomień,
- * - lokalizacji,
- * - motywu,
- * - kategorii zadań.
+ * Odpowiada za:
+ * - Prezentację bieżących preferencji (motyw, powiadomienia, lokalizacja).
+ * - Bezpośrednią kontrolę nad usługami systemowymi poprzez [GeofenceManager] i [ReminderScheduler].
+ * - Zarządzanie słownikiem kategorii zadań.
+ *
+ * @param navController Kontroler nawigacji używany do obsługi przycisku "Wstecz".
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -261,7 +262,11 @@ fun SettingsScreen(navController: NavController) {
 }
 
 /**
- * Lista chipów kategorii z możliwością usuwania niestandardowych.
+ * Komponent wyświetlający kategorie w formie interaktywnych chipów.
+ *
+ * @param categories Lista aktualnych kategorii.
+ * @param defaultList Lista kategorii wbudowanych (nienadających się do usunięcia).
+ * @param onDelete Callback wywoływany przy próbie usunięcia niestandardowej kategorii.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

@@ -36,12 +36,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".screens.QuickAddActivity"
-            android:exported="true"
-            android:label="Szybkie dodaj"
-            android:theme="@style/Theme.ToDo" />
-
         <!-- FileProvider dla udostępniania załączników z pamięci aplikacji -->
         <provider
             android:name="androidx.core.content.FileProvider"

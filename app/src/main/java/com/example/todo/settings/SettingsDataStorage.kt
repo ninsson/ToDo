@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.map
 private const val NAME = "todo_settings"
 private val Context.dataStore by preferencesDataStore(NAME)
 
+/**
+ * Definicje kluczy używanych w DataStore.
+ */
 object SettingsKeys {
     val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
     val LOCATION_ENABLED = booleanPreferencesKey("location_enabled")
@@ -23,19 +26,22 @@ object SettingsKeys {
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /**
- * Domyślne kategorie (po polsku).
- * Zwracamy je zawsze jako podstawę listy; dodatkowe kategorie użytkownika będą dopisywane po nich.
+ * Repozytorium zarządzające ustawieniami aplikacji przy użyciu DataStore.
+ * Zapewnia bezpieczny dostęp do preferencji użytkownika w sposób reaktywny.
  */
 private val DEFAULT_CATEGORIES = listOf("Praca", "Osobiste", "Zakupy", "Zdrowie", "Inne")
 
 class SettingsRepository(private val context: Context) {
 
+    /** Strumień stanu powiadomień. */
     val notificationsEnabled = context.dataStore.data
         .map { prefs -> prefs[SettingsKeys.NOTIFICATIONS_ENABLED] ?: true }
 
+    /** Strumień stanu lokalizacji. */
     val locationEnabled = context.dataStore.data
         .map { prefs -> prefs[SettingsKeys.LOCATION_ENABLED] ?: true }
 
+    /** Strumień wybranego trybu motywu. */
     val themeMode = context.dataStore.data
         .map { prefs ->
             when (prefs[SettingsKeys.THEME_MODE]) {
@@ -45,14 +51,11 @@ class SettingsRepository(private val context: Context) {
             }
         }
 
-    /**
-     * Zwraca listę kategorii: domyślne + dodatkowe zapisane przez użytkownika.
-     * Kolejność: najpierw domyślne (w stałej kolejności), potem dodatkowe w losowej kolejności (string set).
+    /** * Strumień połączonej listy kategorii (domyślne + użytkownika).
      */
     val categories = context.dataStore.data
         .map { prefs ->
             val stored = prefs[SettingsKeys.CATEGORIES] ?: emptySet()
-            // zachowaj kolejność domyślnych, a resztę dopisz na końcu (unikaty)
             val extras = stored.filter { it !in DEFAULT_CATEGORIES }
             DEFAULT_CATEGORIES + extras
         }
@@ -75,6 +78,7 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    /** Pobiera jednorazowy stan powiadomień. Używane w serwisach w tle. */
     suspend fun isNotificationsEnabled(): Boolean {
         val prefs: Preferences = context.dataStore.data.first()
         return prefs[SettingsKeys.NOTIFICATIONS_ENABLED] ?: true

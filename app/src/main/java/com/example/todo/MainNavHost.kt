@@ -12,9 +12,13 @@ import com.example.todo.screens.TaskDetailScreen
 import com.example.todo.screens.SettingsScreen
 
 /**
- * Główny host nawigacji Compose.
+ * Główny host nawigacji aplikacji.
+ * * Odpowiada za definiowanie mapy ekranów oraz bezpieczne przekazywanie parametrów
+ * pomiędzy nimi. Jest to centralny punkt kontroli przepływu użytkownika.
  *
- * Definiuje dostępne trasy i mapuje je na ekrany aplikacji.
+ * @param navController Kontroler nawigacji, który zarządza stosem ekranów.
+ * @param viewModel ViewModel współdzielony przez wszystkie ekrany w celu dostępu do danych.
+ * @param startDestination Trasa startowa aplikacji (domyślnie "list").
  */
 @Composable
 fun MainNavHost(navController: NavHostController, viewModel: TaskViewModel, startDestination: String = "list") {
