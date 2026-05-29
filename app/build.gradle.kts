@@ -55,6 +55,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.play.services.fido)
+    implementation(libs.androidx.media3.database)
+    implementation(libs.play.services.maps)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -79,5 +81,10 @@ dependencies {
     implementation("androidx.compose.material:material")
     // Material3 already present (compose BOM manages versions)
     // Icons (material icons extended) — wersja z BOM
-    implementation("androidx.compose.material:material-icons-extended")
+
+    implementation("androidx.compose.material:material-icons-extended:1.6.0") // Sprawdź najnowszą wersję
+
+    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation("androidx.datastore:datastore-preferences:1.1.0")
+
 }

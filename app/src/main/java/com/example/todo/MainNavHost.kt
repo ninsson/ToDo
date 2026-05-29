@@ -2,8 +2,6 @@ package com.example.todo
 
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.*
-import androidx.compose.runtime.remember
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -13,26 +11,34 @@ import com.example.todo.screens.TaskEditScreen
 import com.example.todo.screens.TaskDetailScreen
 import com.example.todo.screens.SettingsScreen
 
+/**
+ * Główny host nawigacji aplikacji.
+ * * Odpowiada za definiowanie mapy ekranów oraz bezpieczne przekazywanie parametrów
+ * pomiędzy nimi. Jest to centralny punkt kontroli przepływu użytkownika.
+ *
+ * @param navController Kontroler nawigacji, który zarządza stosem ekranów.
+ * @param viewModel ViewModel współdzielony przez wszystkie ekrany w celu dostępu do danych.
+ * @param startDestination Trasa startowa aplikacji (domyślnie "list").
+ */
 @Composable
-fun MainNavHost(viewModel: TaskViewModel) {
-    val nav = rememberNavController()
-    NavHost(navController = nav, startDestination = "list") {
+fun MainNavHost(navController: NavHostController, viewModel: TaskViewModel, startDestination: String = "list") {
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("list") {
-            TaskListScreen(navController = nav, viewModel = viewModel)
+            TaskListScreen(navController = navController, viewModel = viewModel)
         }
         composable("create") {
-            TaskEditScreen(navController = nav, viewModel = viewModel, taskId = null)
+            TaskEditScreen(navController = navController, viewModel = viewModel, taskId = null)
         }
         composable("edit/{id}") { backStack ->
             val id = backStack.arguments?.getString("id")?.toLongOrNull()
-            TaskEditScreen(navController = nav, viewModel = viewModel, taskId = id)
+            TaskEditScreen(navController = navController, viewModel = viewModel, taskId = id)
         }
         composable("details/{id}") { backStack ->
             val id = backStack.arguments?.getString("id")?.toLongOrNull()
-            if (id != null) TaskDetailScreen(navController = nav, viewModel = viewModel, taskId = id)
+            if (id != null) TaskDetailScreen(navController = navController, viewModel = viewModel, taskId = id)
         }
         composable("settings") {
-            SettingsScreen(navController = nav)
+            SettingsScreen(navController = navController)
         }
     }
 }

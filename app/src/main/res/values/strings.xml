@@ -1,3 +1,14 @@
 <resources>
     <string name="app_name">ToDo</string>
+
+    <!-- shortcuts -->
+    <string name="shortcut_short_label">Szybkie dodaj</string>
+    <string name="shortcut_long_label">Szybkie dodawanie zadania</string>
+
+    <!-- widget -->
+    <string name="widget_title">ToDo</string>
+    <string name="widget_count_zero">0 oczekujących</string>
+    <string name="widget_add_button">Dodaj</string>
+    <string name="widget_quick_add_subtitle">Szybkie dodanie</string>
+    <string name="widget_quick_add_button">Dodaj</string>
 </resources>
