@@ -62,13 +62,8 @@ class MainActivity : ComponentActivity() {
 
                 val startIntent by navIntentFlow.collectAsState()
 
-                val initialDestination = remember(startIntent) {
-                    val i = startIntent
-                    if (i != null && i.getBooleanExtra("open_create", false)) {
-                        "create"
-                    } else {
-                        "list"
-                    }
+                val initialDestination = remember {
+                    if (intent.getBooleanExtra("open_create", false)) "create" else "list"
                 }
 
                 val vm: TaskViewModel =
@@ -93,6 +88,9 @@ class MainActivity : ComponentActivity() {
                         }
 
                         openCreate -> {
+                            nav.navigate("create") {
+                                launchSingleTop = true
+                            }
                         }
                     }
 

@@ -777,7 +777,7 @@ private fun deleteAttachmentFile(att: Attachment) {
 
     val file = File(att.localPath)
     runCatching { file.delete() }
-    
+
     val parent = file.parentFile
     if (parent != null && parent.exists()) {
         val isEmpty = parent.list()?.isEmpty() ?: false
