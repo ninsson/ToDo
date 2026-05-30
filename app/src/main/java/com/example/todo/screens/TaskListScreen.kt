@@ -36,6 +36,8 @@ import com.example.todo.viewmodel.TaskViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.ui.platform.LocalContext
+import com.example.todo.settings.SettingsRepository
 
 /**
  * Ekran listy zadań.
@@ -61,6 +63,13 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
 
     val snackbarHostState = remember { SnackbarHostState() }
     var sortMenuExpanded by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val settingsRepo = remember { SettingsRepository(context) }
+    val categories by settingsRepo.categories.collectAsState(initial = emptyList())
+
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(selectedCategory) { viewModel.setCategoryFilter(selectedCategory) }
 
     Scaffold(
         topBar = {
@@ -127,6 +136,31 @@ fun TaskListScreen(navController: NavController, viewModel: TaskViewModel) {
                 item { FilterChipSelectable("Wysoki priorytet", FilterOption.HIGH_PRIORITY, filter) { filter = it } }
                 item { FilterChipSelectable("Oczekujące", FilterOption.PENDING, filter) { filter = it } }
                 item { FilterChipSelectable("Wykonane", FilterOption.DONE, filter) { filter = it } }
+            }
+
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedCategory == null,
+                        onClick = { selectedCategory = null },
+                        label = { Text("Wszystkie kategorie") },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+                items(categories) { cat ->
+                    FilterChip(
+                        selected = selectedCategory == cat,
+                        onClick = { selectedCategory = cat },
+                        label = { Text(cat) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
             }
 
             if (tasks.isEmpty()) {
