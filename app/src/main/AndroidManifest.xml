@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
 
     <application
         android:allowBackup="true"
@@ -16,7 +17,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ToDo">
 
-        <!-- TODO: podmień YOUR_API_KEY na prawdziwy klucz Google Maps -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="YOUR_API_KEY" />
@@ -36,7 +36,6 @@
             </intent-filter>
         </activity>
 
-        <!-- FileProvider dla udostępniania załączników z pamięci aplikacji -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -47,9 +46,12 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
-        <!-- odbiornik geofence -->
         <receiver
             android:name=".notifications.GeofenceBroadcastReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".notifications.ReminderReceiver"
             android:exported="false" />
 
         <receiver
@@ -62,8 +64,6 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/quick_add_widget_info" />
         </receiver>
-
-        <!-- Activity do pickowania miejsca na mapie -->
     </application>
 
 </manifest>
