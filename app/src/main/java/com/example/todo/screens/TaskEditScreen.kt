@@ -773,8 +773,17 @@ private fun sanitizeFileName(name: String): String {
  * Usuwa lokalny plik załącznika (jeśli to ścieżka lokalna).
  */
 private fun deleteAttachmentFile(att: Attachment) {
-    if (!att.localPath.startsWith("content://")) {
-        runCatching { File(att.localPath).delete() }
+    if (att.localPath.startsWith("content://")) return
+
+    val file = File(att.localPath)
+    runCatching { file.delete() }
+    
+    val parent = file.parentFile
+    if (parent != null && parent.exists()) {
+        val isEmpty = parent.list()?.isEmpty() ?: false
+        if (isEmpty) {
+            runCatching { parent.delete() }
+        }
     }
 }
 
