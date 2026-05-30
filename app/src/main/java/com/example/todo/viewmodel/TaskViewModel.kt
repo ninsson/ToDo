@@ -42,6 +42,10 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
     /** Bieżąca opcja filtrowania. */
     private val _filterOption = MutableStateFlow(FilterOption.ALL)
 
+    private val _categoryFilter = MutableStateFlow<String?>(null)
+
+    fun setCategoryFilter(category: String?) { _categoryFilter.value = category }
+
     /** Aktualizacja wyszukiwania. */
     fun setSearchQuery(q: String) { _searchQuery.value = q }
 
@@ -59,8 +63,9 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
         repo.observeAll(),
         _searchQuery.debounce(250),
         _sortOption,
-        _filterOption
-    ) { list, q, sortOpt, filterOpt ->
+        _filterOption,
+        _categoryFilter
+    ) { list, q, sortOpt, filterOpt, categoryFilter ->
         var result = list
 
         // search
@@ -86,6 +91,11 @@ class TaskViewModel(private val repo: TaskRepository, private val context: Conte
             FilterOption.HIGH_PRIORITY -> result.filter { it.priority == Priority.HIGH }
             FilterOption.PENDING -> result.filter { it.status == TaskStatus.PENDING }
             FilterOption.DONE -> result.filter { it.status == TaskStatus.DONE }
+        }
+
+        // category filter
+        if (!categoryFilter.isNullOrBlank()) {
+            result = result.filter { it.category == categoryFilter }
         }
 
         // sort
